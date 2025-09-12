@@ -40,7 +40,7 @@ extern "C" {
 #define USER_APP_KEY                "your_app_key"
 #define USER_APP_LICENSE            "your_app_license"
 #define USER_DEVELOPER_ACCOUNT      "your_developer_account"
-#define USER_BAUD_RATE              "460800"
+#define USER_BAUD_RATE              "921600"
 
 /* Exported types ------------------------------------------------------------*/
 

@@ -35,12 +35,12 @@ extern "C" {
 /* Exported constants --------------------------------------------------------*/
 // ATTENTION: User must goto https://developer.dji.com/user/apps/#all to create your own dji sdk application, get dji sdk application
 // information then fill in the application information here.
-#define USER_APP_NAME               "your_app_name"
-#define USER_APP_ID                 "your_app_id"
-#define USER_APP_KEY                "your_app_key"
-#define USER_APP_LICENSE            "your_app_license"
-#define USER_DEVELOPER_ACCOUNT      "your_developer_account"
-#define USER_BAUD_RATE              "460800"
+#define USER_APP_NAME               "ZH480MINI"
+#define USER_APP_ID                 "162546"
+#define USER_APP_KEY                "d3a5cdfcda8cce3252fb48a51ad32e8"
+#define USER_APP_LICENSE            "oFlRYsZ35uT0PBG466qQsmgh2ogXqUPvfH7jh15Sr8+bhtYwQltxDqLGiK3UQvCYqRvKck3VBSbE/MzobTegxhAxA66ezOEwcxeiSrE+sIv+VEmDdpJ8dgXk1mlsupQMuu3GYuUzvA/zTIprOrY2mjO2qY9/THJuWnwSOtY9S01o4gmiaWh7u8aKKQXXIuPmEfSchZqE9BnGoadQi1GuFF9M3wx7FBhOtfTRQqZJw/zmw0lmQr9tbXuH15pPUUmUesREDveCGKKYRshgy2JKq77J9fQ2a1d6AET8aq01Uu7QB6TuVf170zwHuuFUAr8cyonvZ7YZ0MY2KdLb2++tiw=="
+#define USER_DEVELOPER_ACCOUNT      "2799004640@qq.com"
+#define USER_BAUD_RATE              "921600"
 
 /* Exported types ------------------------------------------------------------*/
 

@@ -168,7 +168,8 @@ static T_DjiReturnCode DjiTest_CameraRotationGimbal(T_TestCameraGimbalRotationAr
 static void *UserCamera_Task(void *arg);
 
 /* Exported functions definition ---------------------------------------------*/
-
+extern int pause_cam_stream();
+extern int resume_cam_stream();
 /* Private functions definition-----------------------------------------------*/
 static T_DjiReturnCode GetSystemState(T_DjiCameraSystemState *systemState)
 {
@@ -196,13 +197,16 @@ static T_DjiReturnCode SetMode(E_DjiCameraMode mode)
 {
     T_DjiReturnCode returnCode;
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
-
+    static int temp = 1;
     returnCode = osalHandler->MutexLock(s_commonMutex);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
-
+    if (mode == 2 && s_cameraState.cameraMode != 2)
+        pause_cam_stream();//停止图传
+    else if (mode != 2 && s_cameraState.cameraMode == 2)
+        resume_cam_stream();//开启图传
     s_cameraState.cameraMode = mode;
     USER_LOG_INFO("set camera mode:%d", mode);
 
@@ -994,12 +998,12 @@ static void *UserCamera_Task(void *arg)
                 if (UtilFile_IsFileExist(PHOTO_FILE_PATH) == true) {
                     psdkStat = PsdkTest_CameraMediaGetFileInfo(PHOTO_FILE_PATH, &mediaFileInfo);
                     if (psdkStat != dji_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                        PsdkLogger_UserLogError("Get media file info error 0x%08llX", psdkStat);
+                        PsdkLogger_UserUSER_LOG_ERRORrror("Get media file info error 0x%08llX", psdkStat);
                     }
 
                     psdkStat = PsdkPayloadCamera_PushAddedMediaFileInfo(PHOTO_FILE_PATH, mediaFileInfo);
                     if (psdkStat != dji_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                        PsdkLogger_UserLogError("Push added media file info error 0x%08llX", psdkStat);
+                        PsdkLogger_UserUSER_LOG_ERRORrror("Push added media file info error 0x%08llX", psdkStat);
                     }
                 } else {
                     PsdkLogger_UserLogWarn("Can't found the media file by path. "

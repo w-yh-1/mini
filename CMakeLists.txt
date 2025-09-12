@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.5)
 
 if (NOT USE_SYSTEM_ARCH)
     # select use platform 'LINUX' or 'RTOS' here, reset cache and reload cmake project
@@ -25,12 +25,17 @@ if (" ${CMAKE_SOURCE_DIR}" STREQUAL " ${CMAKE_BINARY_DIR}")
        You should create a separate directory for build files.")
 endif ()
 
+include_directories(serialAPI)
+add_subdirectory(serialAPI)
+
 if (USE_SYSTEM_ARCH MATCHES LINUX)
     add_definitions(-DSYSTEM_ARCH_LINUX)
     add_subdirectory(samples/sample_c/platform/linux/manifold2)
-    add_subdirectory(samples/sample_c++/platform/linux/manifold2)
+    # add_subdirectory(samples/sample_c++/platform/linux/manifold2)
     
-    execute_process(COMMAND uname -m OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
+    
+    # execute_process(COMMAND uname -m OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
+    SET(DEVICE_SYSTEM_ID aarch64)
     if (DEVICE_SYSTEM_ID MATCHES x86_64)
         set(LIBRARY_PATH psdk_lib/lib/x86_64-linux-gnu-gcc)
     elseif (DEVICE_SYSTEM_ID MATCHES aarch64)

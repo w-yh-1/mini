@@ -21,9 +21,9 @@ endif ()
 set(PACKAGE_NAME payloadsdk)
 
 ## "uname -m" to auto distinguish Manifold2-G or Manifold2-C
-execute_process(COMMAND uname -m
-        OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
-
+# execute_process(COMMAND uname -m
+#         OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
+SET(DEVICE_SYSTEM_ID aarch64)
 if (DEVICE_SYSTEM_ID MATCHES x86_64)
     set(TOOLCHAIN_NAME x86_64-linux-gnu-gcc)
     add_definitions(-DPLATFORM_ARCH_x86_64=1)
@@ -65,7 +65,7 @@ if (OPUS_FOUND)
     message(STATUS " - Libraries: ${OPUS_LIBRARY}")
 
     add_definitions(-DOPUS_INSTALLED)
-    target_link_libraries(${PROJECT_NAME} /usr/local/lib/libopus.a)
+    target_link_libraries(${PROJECT_NAME} libopus.a)
 else ()
     message(STATUS "Cannot Find OPUS")
 endif (OPUS_FOUND)

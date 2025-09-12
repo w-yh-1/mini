@@ -4,8 +4,8 @@ project(dji_sdk_demo_linux_cxx CXX)
 set(CMAKE_C_FLAGS "-pthread -std=gnu99")
 set(CMAKE_CXX_FLAGS "-std=c++11 -pthread")
 set(CMAKE_EXE_LINKER_FLAGS "-pthread")
-set(CMAKE_C_COMPILER "gcc")
-set(CMAKE_CXX_COMPILER "g++")
+# set(CMAKE_C_COMPILER "gcc")
+# set(CMAKE_CXX_COMPILER "g++")
 add_definitions(-D_GNU_SOURCE)
 
 if (MEMORY_LEAK_CHECK_ON MATCHES TRUE)
@@ -39,8 +39,9 @@ file(GLOB_RECURSE MODULE_COMMON_SRC ../common/*.c*)
 file(GLOB_RECURSE MODULE_HAL_SRC hal/*.c*)
 file(GLOB_RECURSE MODULE_APP_SRC application/*.c*)
 
-execute_process(COMMAND uname -m
-        OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
+# execute_process(COMMAND uname -m
+#         OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
+SET(DEVICE_SYSTEM_ID aarch64)
 if (DEVICE_SYSTEM_ID MATCHES x86_64)
     set(TOOLCHAIN_NAME x86_64-linux-gnu-gcc)
     add_definitions(-DPLATFORM_ARCH_x86_64=1)
@@ -81,19 +82,19 @@ if (FFMPEG_FOUND)
     message(STATUS " - Includes: ${FFMPEG_INCLUDE_DIR}")
     message(STATUS " - Libraries: ${FFMPEG_LIBRARIES}")
 
-    EXECUTE_PROCESS(COMMAND ffmpeg -version
-            OUTPUT_VARIABLE ffmpeg_version_output
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-    string(REGEX MATCH "version.*Copyright" ffmpeg_version_line ${ffmpeg_version_output})
-    string(REGEX MATCH " .* " ffmpeg_version ${ffmpeg_version_line})
-    string(REGEX MATCH "^ 5.*$" ffmpeg_major_version ${ffmpeg_version})
+    # EXECUTE_PROCESS(COMMAND ffmpeg -version
+    #         OUTPUT_VARIABLE ffmpeg_version_output
+    #         OUTPUT_STRIP_TRAILING_WHITESPACE
+    #         )
+    # string(REGEX MATCH "version.*Copyright" ffmpeg_version_line ${ffmpeg_version_output})
+    # string(REGEX MATCH " .* " ffmpeg_version ${ffmpeg_version_line})
+    # string(REGEX MATCH "^ 5.*$" ffmpeg_major_version ${ffmpeg_version})
 
-    if (HEAD${ffmpeg_major_version} STREQUAL "HEAD")
-        message(STATUS " - Version: ${ffmpeg_version}")
-    else ()
-        message(FATAL_ERROR " - Not support FFMPEG version: ${ffmpeg_major_version}, please install 4.x.x instead.")
-    endif ()
+    # if (HEAD${ffmpeg_major_version} STREQUAL "HEAD")
+    #     message(STATUS " - Version: ${ffmpeg_version}")
+    # else ()
+    #     message(FATAL_ERROR " - Not support FFMPEG version: ${ffmpeg_major_version}, please install 4.x.x instead.")
+    # endif ()
 
     target_link_libraries(${PROJECT_NAME} ${FFMPEG_LIBRARIES})
     include_directories(${FFMPEG_INCLUDE_DIR})
@@ -110,7 +111,8 @@ if (OPUS_FOUND)
     message(STATUS " - Libraries: ${OPUS_LIBRARY}")
 
     add_definitions(-DOPUS_INSTALLED)
-    target_link_libraries(${PROJECT_NAME} /usr/local/lib/libopus.a)
+    include_directories(${OPUS_INCLUDE_DIR})
+    target_link_libraries(${PROJECT_NAME} opus)
 else ()
     message(STATUS "Cannot Find OPUS")
 endif (OPUS_FOUND)
@@ -122,6 +124,7 @@ if (LIBUSB_FOUND)
     message(STATUS " - Libraries: ${LIBUSB_LIBRARY}")
 
     add_definitions(-DLIBUSB_INSTALLED)
+    include_directories(${LIBUSB_INCLUDE_DIR})
     target_link_libraries(${PROJECT_NAME} usb-1.0)
 else ()
     message(STATUS "Cannot Find LIBUSB")

@@ -33,8 +33,8 @@
 #include "file_binary_array_list_en.h"
 
 /* Private constants ---------------------------------------------------------*/
-#define WIDGET_DIR_PATH_LEN_MAX         (256)
-#define WIDGET_TASK_STACK_SIZE          (2048)
+#define WIDGET_DIR_PATH_LEN_MAX (256)
+#define WIDGET_TASK_STACK_SIZE (2048)
 
 /* Private types -------------------------------------------------------------*/
 
@@ -51,15 +51,15 @@ static bool s_isWidgetFileDirPathConfigured = false;
 static char s_widgetFileDirPath[DJI_FILE_PATH_SIZE_MAX] = {0};
 
 static const T_DjiWidgetHandlerListItem s_widgetHandlerList[] = {
-    {0, DJI_WIDGET_TYPE_BUTTON,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {1, DJI_WIDGET_TYPE_LIST,          DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {2, DJI_WIDGET_TYPE_SWITCH,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {3, DJI_WIDGET_TYPE_SCALE,         DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {4, DJI_WIDGET_TYPE_BUTTON,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {5, DJI_WIDGET_TYPE_SCALE,         DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {0, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {1, DJI_WIDGET_TYPE_LIST, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {2, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {3, DJI_WIDGET_TYPE_SCALE, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {4, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {5, DJI_WIDGET_TYPE_SCALE, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {7, DJI_WIDGET_TYPE_SWITCH,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {8, DJI_WIDGET_TYPE_LIST,          DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {7, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {8, DJI_WIDGET_TYPE_LIST, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
 };
 
 static const char *s_widgetTypeNameArray[] = {
@@ -68,8 +68,7 @@ static const char *s_widgetTypeNameArray[] = {
     "Switch",
     "Scale",
     "List",
-    "Int input box"
-};
+    "Int input box"};
 
 static const uint32_t s_widgetHandlerListCount = sizeof(s_widgetHandlerList) / sizeof(T_DjiWidgetHandlerListItem);
 static int32_t s_widgetValueList[sizeof(s_widgetHandlerList) / sizeof(T_DjiWidgetHandlerListItem)] = {0};
@@ -80,83 +79,102 @@ T_DjiReturnCode DjiTest_WidgetStartService(void)
     T_DjiReturnCode djiStat;
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    //Step 1 : Init DJI Widget
+    // Step 1 : Init DJI Widget
     djiStat = DjiWidget_Init();
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Dji test widget init error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 
 #ifdef SYSTEM_ARCH_LINUX
-    //Step 2 : Set UI Config (Linux environment)
+    // Step 2 : Set UI Config (Linux environment)
     char curFileDirPath[WIDGET_DIR_PATH_LEN_MAX];
     char tempPath[WIDGET_DIR_PATH_LEN_MAX];
+
+    DjiTest_WidgetSetConfigFilePath("/usr/local/bin/");
+
     djiStat = DjiUserUtil_GetCurrentFileDirPath(__FILE__, WIDGET_DIR_PATH_LEN_MAX, curFileDirPath);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Get file current path error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 
-    if (s_isWidgetFileDirPathConfigured == true) {
+    if (s_isWidgetFileDirPathConfigured == true)
+    {
         snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/en_big_screen", s_widgetFileDirPath);
-    } else {
+    }
+    else
+    {
         snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/en_big_screen", curFileDirPath);
     }
+    USER_LOG_INFO("widget ui config path: %s", tempPath);
 
-    //set default ui config path
+    // set default ui config path
     djiStat = DjiWidget_RegDefaultUiConfigByDirPath(tempPath);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Add default widget ui config error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 
-    //set ui config for English language
+    // set ui config for English language
     djiStat = DjiWidget_RegUiConfigByDirPath(DJI_MOBILE_APP_LANGUAGE_ENGLISH,
                                              DJI_MOBILE_APP_SCREEN_TYPE_BIG_SCREEN,
                                              tempPath);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Add widget ui config error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 
-    //set ui config for Chinese language
-    if (s_isWidgetFileDirPathConfigured == true) {
+    // set ui config for Chinese language
+    if (s_isWidgetFileDirPathConfigured == true)
+    {
         snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/cn_big_screen", s_widgetFileDirPath);
-    } else {
+    }
+    else
+    {
         snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/cn_big_screen", curFileDirPath);
     }
+
+    USER_LOG_INFO("widget ui config path: %s", tempPath);
 
     djiStat = DjiWidget_RegUiConfigByDirPath(DJI_MOBILE_APP_LANGUAGE_CHINESE,
                                              DJI_MOBILE_APP_SCREEN_TYPE_BIG_SCREEN,
                                              tempPath);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Add widget ui config error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 #else
-    //Step 2 : Set UI Config (RTOS environment)
+    // Step 2 : Set UI Config (RTOS environment)
     T_DjiWidgetBinaryArrayConfig enWidgetBinaryArrayConfig = {
         .binaryArrayCount = g_EnBinaryArrayCount,
-        .fileBinaryArrayList = g_EnFileBinaryArrayList
-    };
+        .fileBinaryArrayList = g_EnFileBinaryArrayList};
 
-    //set default ui config
+    // set default ui config
     djiStat = DjiWidget_RegDefaultUiConfigByBinaryArray(&enWidgetBinaryArrayConfig);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Add default widget ui config error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 #endif
-    //Step 3 : Set widget handler list
+    // Step 3 : Set widget handler list
     djiStat = DjiWidget_RegHandlerList(s_widgetHandlerList, s_widgetHandlerListCount);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Set widget handler list error, stat = 0x%08llX", djiStat);
         return djiStat;
     }
 
-    //Step 4 : Run widget api sample task
+    // Step 4 : Run widget api sample task
     if (osalHandler->TaskCreate("user_widget_task", DjiTest_WidgetTask, WIDGET_TASK_STACK_SIZE, NULL,
-                                &s_widgetTestThread) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                                &s_widgetTestThread) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Dji widget test task create error.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -175,7 +193,6 @@ T_DjiReturnCode DjiTest_WidgetSetConfigFilePath(const char *path)
 
 __attribute__((weak)) void DjiTest_WidgetLogAppend(const char *fmt, ...)
 {
-
 }
 
 #ifndef __CC_ARM
@@ -195,9 +212,11 @@ static void *DjiTest_WidgetTask(void *arg)
 
     USER_UTIL_UNUSED(arg);
 
-    while (1) {
+    while (1)
+    {
         djiStat = osalHandler->GetTimeMs(&sysTimeMs);
-        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("Get system time ms error, stat = 0x%08llX", djiStat);
         }
 
@@ -211,9 +230,9 @@ static void *DjiTest_WidgetTask(void *arg)
                  __DATE__, __TIME__);
 #endif
 
-
         djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
-        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
         }
 

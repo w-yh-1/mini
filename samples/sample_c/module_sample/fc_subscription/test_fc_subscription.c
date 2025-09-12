@@ -30,6 +30,8 @@
 #include "dji_platform.h"
 #include "widget_interaction_test/test_widget_interaction.h"
 
+#include "sbgc32.h"
+
 /* Private constants ---------------------------------------------------------*/
 #define FC_SUBSCRIPTION_TASK_FREQ         (1)
 #define FC_SUBSCRIPTION_TASK_STACK_SIZE   (1024)
@@ -41,11 +43,17 @@ static void *UserFcSubscription_Task(void *arg);
 static T_DjiReturnCode DjiTest_FcSubscriptionReceiveQuaternionCallback(const uint8_t *data, uint16_t dataSize,
                                                                        const T_DjiDataTimestamp *timestamp);
 
+static T_DjiReturnCode GimbalCallback(const uint8_t *data, uint16_t dataSize,
+                                      const T_DjiDataTimestamp *timestamp);
+
 /* Private variables ---------------------------------------------------------*/
 static T_DjiTaskHandle s_userFcSubscriptionThread;
 static bool s_userFcSubscriptionDataShow = false;
 static uint8_t s_totalSatelliteNumberUsed = 0;
 static uint32_t s_userFcSubscriptionDataCnt = 0;
+
+static sbgcGeneral_t SBGC32_Device;
+static sbgcControl_t Control;
 
 /* Exported functions definition ---------------------------------------------*/
 T_DjiReturnCode DjiTest_FcSubscriptionStartService(void)
@@ -60,51 +68,60 @@ T_DjiReturnCode DjiTest_FcSubscriptionStartService(void)
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION, DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                               DjiTest_FcSubscriptionReceiveQuaternionCallback);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Subscribe topic quaternion error.");
-        return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
-    } else {
-        USER_LOG_DEBUG("Subscribe topic quaternion success.");
-    }
+    // Init SBGC32
+    SBGC32_Init(&SBGC32_Device);
+    memset(&Control, 0, sizeof(Control));
 
-    djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_VELOCITY, DJI_DATA_SUBSCRIPTION_TOPIC_1_HZ,
-                                               NULL);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Subscribe topic velocity error.");
-        return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
-    } else {
-        USER_LOG_DEBUG("Subscribe topic velocity success.");
-    }
+    // djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION, DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
+    //                                            DjiTest_FcSubscriptionReceiveQuaternionCallback);
+    // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    //     USER_LOG_ERROR("Subscribe topic quaternion error.");
+    //     return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    // } else {
+    //     USER_LOG_DEBUG("Subscribe topic quaternion success.");
+    // }
 
-    djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GPS_POSITION, DJI_DATA_SUBSCRIPTION_TOPIC_1_HZ,
-                                               NULL);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Subscribe topic gps position error.");
-        return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
-    } else {
-        USER_LOG_DEBUG("Subscribe topic gps position success.");
-    }
+    // djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_VELOCITY, DJI_DATA_SUBSCRIPTION_TOPIC_1_HZ,
+    //                                            NULL);
+    // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    //     USER_LOG_ERROR("Subscribe topic velocity error.");
+    //     return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    // } else {
+    //     USER_LOG_DEBUG("Subscribe topic velocity success.");
+    // }
 
-    djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GPS_DETAILS, DJI_DATA_SUBSCRIPTION_TOPIC_1_HZ,
-                                               NULL);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Subscribe topic gps details error.");
-        return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
-    } else {
-        USER_LOG_DEBUG("Subscribe topic gps details success.");
-    }
+    // djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GPS_POSITION, DJI_DATA_SUBSCRIPTION_TOPIC_1_HZ,
+    //                                            NULL);
+    // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    //     USER_LOG_ERROR("Subscribe topic gps position error.");
+    //     return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    // } else {
+    //     USER_LOG_DEBUG("Subscribe topic gps position success.");
+    // }
 
-    if (osalHandler->TaskCreate("user_subscription_task", UserFcSubscription_Task,
-                                FC_SUBSCRIPTION_TASK_STACK_SIZE, NULL, &s_userFcSubscriptionThread) !=
-        DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("user data subscription task create error.");
-        return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
-    }
+    // djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GPS_DETAILS, DJI_DATA_SUBSCRIPTION_TOPIC_1_HZ,
+    //                                            NULL);
+    // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    //     USER_LOG_ERROR("Subscribe topic gps details error.");
+    //     return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    // } else {
+    //     USER_LOG_DEBUG("Subscribe topic gps details success.");
+    // }
+
+    djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GIMBAL_ANGLES,DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
+                                               GimbalCallback);
+
+    // if (osalHandler->TaskCreate("user_subscription_task", UserFcSubscription_Task,
+    //                             FC_SUBSCRIPTION_TASK_STACK_SIZE, NULL, &s_userFcSubscriptionThread) !=
+    //     DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    //     USER_LOG_ERROR("user data subscription task create error.");
+    //     return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    // }
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
+
+
 
 T_DjiReturnCode DjiTest_FcSubscriptionRunSample(void)
 {
@@ -353,3 +370,30 @@ static T_DjiReturnCode DjiTest_FcSubscriptionReceiveQuaternionCallback(const uin
 }
 
 /****************** (C) COPYRIGHT DJI Innovations *****END OF FILE****/
+
+static T_DjiReturnCode GimbalCallback(const uint8_t *data, uint16_t dataSize,
+                                      const T_DjiDataTimestamp *timestamp)
+{
+    static T_DjiFcSubscriptionGimbalAngles lastGimbalAngles = {0};
+    T_DjiFcSubscriptionGimbalAngles *gimbalAngles = (T_DjiFcSubscriptionGimbalAngles *) data;
+    dji_f32_t pitch_speed;
+
+    USER_UTIL_UNUSED(dataSize);
+    USER_UTIL_UNUSED(timestamp);
+
+    if(lastGimbalAngles.x!=gimbalAngles->x)
+    {
+        pitch_speed = (gimbalAngles->x - lastGimbalAngles.x)/0.02;//50Hz
+        lastGimbalAngles.x = gimbalAngles->x;
+
+        Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
+        Control.AxisC[PITCH].angle = sbgcAngleToDegree(gimbalAngles->x); // unit: degree
+        Control.AxisC[PITCH].speed = sbgcSpeedToValue(pitch_speed);           // unit: degree/s
+        SBGC32_Control(&SBGC32_Device, &Control);
+    }
+
+    // USER_LOG_INFO("gimbal angles: pitch = %.2f roll = %.2f yaw = %.2f.\r\n",
+    //               gimbalAngles->x, gimbalAngles->y, gimbalAngles->z);
+
+    return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
+}

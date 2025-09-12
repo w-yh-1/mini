@@ -30,15 +30,17 @@
 #include "dji_logger.h"
 #include "dji_platform.h"
 #include "utils/util_misc.h"
+#include "sbgc32.h"
 
 /* Private constants ---------------------------------------------------------*/
-#define PAYLOAD_GIMBAL_EMU_TASK_STACK_SIZE  (2048)
-#define PAYLOAD_GIMBAL_TASK_FREQ            1000
-#define PAYLOAD_GIMBAL_CALIBRATION_TIME_MS  2000
-#define PAYLOAD_GIMBAL_MIN_ACTION_TIME      5
+#define PAYLOAD_GIMBAL_EMU_TASK_STACK_SIZE (2048)
+#define PAYLOAD_GIMBAL_TASK_FREQ 1000
+#define PAYLOAD_GIMBAL_CALIBRATION_TIME_MS 2000
+#define PAYLOAD_GIMBAL_MIN_ACTION_TIME 5
 
 /* Private types -------------------------------------------------------------*/
-typedef enum {
+typedef enum
+{
     TEST_GIMBAL_CONTROL_TYPE_UNKNOWN = 0,
     TEST_GIMBAL_CONTROL_TYPE_SPEED = 1,
     TEST_GIMBAL_CONTROL_TYPE_ANGLE = 2,
@@ -76,23 +78,26 @@ static bool s_rotatingFlag = false;
 static T_DjiMutexHandle s_commonMutex = {0};
 
 static T_DjiGimbalAttitudeInformation s_attitudeInformation = {0}; // unit: 0.1 degree, ground coordination
-static T_DjiAttitude3f s_attitudeHighPrecision = {0}; // unit: 0.1 degree, ground coordination
+static T_DjiAttitude3f s_attitudeHighPrecision = {0};              // unit: 0.1 degree, ground coordination
 static T_DjiGimbalCalibrationState s_calibrationState = {0};
-static T_DjiAttitude3d s_targetAttitude = {0}; // unit: 0.1 degree, ground coordination
-static T_DjiAttitude3d s_speed = {0}; // unit: 0.1 degree/s, ground coordination
-static T_DjiAttitude3d s_aircraftAttitude = {0}; // unit: 0.1 degree, ground coordination
+static T_DjiAttitude3d s_targetAttitude = {0};       // unit: 0.1 degree, ground coordination
+static T_DjiAttitude3d s_speed = {0};                // unit: 0.1 degree/s, ground coordination
+static T_DjiAttitude3d s_aircraftAttitude = {0};     // unit: 0.1 degree, ground coordination
 static T_DjiAttitude3d s_lastAircraftAttitude = {0}; // unit: 0.1 degree, ground coordination
 static E_TestGimbalControlType s_controlType = TEST_GIMBAL_CONTROL_TYPE_UNKNOWN;
 static const T_DjiAttitude3d s_jointAngleLimitMin = {-1200, -100, -1800}; // unit: 0.1 degree
-static const T_DjiAttitude3d s_jointAngleLimitMax = {300, 100, 1800}; // unit: 0.1 degree
-static const T_DjiAttitude3d s_eulerAngleLimitMin = {-900, -100, -1800}; // unit: 0.1 degree
-static const T_DjiAttitude3d s_eulerAngleLimitMax = {100, 100, 1800}; // unit: 0.1 degree
-static const int32_t s_pitchEulerAngleExtensionMin = -1200; // unit: 0.1 degree
-static const int32_t s_pitchEulerAngleExtensionMax = 300; // unit: 0.1 degree
-static const T_DjiAttitude3d s_speedLimit = {1800, 1800, 1800}; // unit: 0.1 degree/s
-static uint32_t s_calibrationStartTime = 0; // unit: ms
+static const T_DjiAttitude3d s_jointAngleLimitMax = {300, 100, 1800};     // unit: 0.1 degree
+static const T_DjiAttitude3d s_eulerAngleLimitMin = {-900, -100, -1800};  // unit: 0.1 degree
+static const T_DjiAttitude3d s_eulerAngleLimitMax = {100, 100, 1800};     // unit: 0.1 degree
+static const int32_t s_pitchEulerAngleExtensionMin = -1200;               // unit: 0.1 degree
+static const int32_t s_pitchEulerAngleExtensionMax = 300;                 // unit: 0.1 degree
+static const T_DjiAttitude3d s_speedLimit = {1800, 1800, 1800};           // unit: 0.1 degree/s
+static uint32_t s_calibrationStartTime = 0;                               // unit: ms
 static T_DjiMutexHandle s_attitudeMutex = NULL;
 static T_DjiMutexHandle s_calibrationMutex = NULL;
+
+static sbgcGeneral_t SBGC32_Device;
+static sbgcControl_t Control;
 
 /* Exported functions definition ---------------------------------------------*/
 /**
@@ -105,6 +110,9 @@ T_DjiReturnCode DjiTest_GimbalStartService(void)
     T_DjiReturnCode djiStat;
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
+    SBGC32_Init(&SBGC32_Device);
+    memset(&Control, 0, sizeof(Control));
+
     s_systemState.resettingFlag = false;
     s_systemState.mountedUpward = false;
     s_systemState.blockingFlag = false;
@@ -113,8 +121,8 @@ T_DjiReturnCode DjiTest_GimbalStartService(void)
     s_calibrationState.calibratingFlag = false;
     s_calibrationState.lastCalibrationResult = true;
 
-    s_commonHandler.GetSystemState = GetSystemState;
-    s_commonHandler.GetAttitudeInformation = GetAttitudeInformation;
+    s_commonHandler.GetSystemState = GetSystemState;                 // ok
+    s_commonHandler.GetAttitudeInformation = GetAttitudeInformation; // ok
     s_commonHandler.GetCalibrationState = GetCalibrationState;
     s_commonHandler.GetRotationSpeed = GetRotationSpeed;
     s_commonHandler.GetJointAngle = GetJointAngle;
@@ -129,45 +137,52 @@ T_DjiReturnCode DjiTest_GimbalStartService(void)
     s_commonHandler.FineTuneAngle = FineTuneAngle;
 
     djiStat = DjiFcSubscription_Init();
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("init data subscription module error.");
         return djiStat;
     }
 
-    if (osalHandler->MutexCreate(&s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexCreate(&s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex create error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (osalHandler->MutexCreate(&s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexCreate(&s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex create error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (osalHandler->MutexCreate(&s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexCreate(&s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex create error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     djiStat = DjiGimbal_Init();
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("init gimbal module error: 0x%08llX", djiStat);
         return djiStat;
     }
 
     djiStat = DjiGimbal_RegCommonHandler(&s_commonHandler);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("gimbal register common handler error: 0x%08llX", djiStat);
         return djiStat;
     }
 
     if (osalHandler->TaskCreate("user_gimbal_task", UserGimbal_Task,
                                 PAYLOAD_GIMBAL_EMU_TASK_STACK_SIZE, NULL, &s_userGimbalThread) !=
-        DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("user gimbal task create error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
-
+  
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
 
@@ -177,35 +192,40 @@ T_DjiReturnCode DjiTest_GimbalDeInit(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     djiStat = osalHandler->TaskDestroy(s_userGimbalThread);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Destroy test gimbal thread error: 0x%08llX.", djiStat);
         return djiStat;
     }
 
     djiStat = DjiGimbal_DeInit();
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("Deinit gimbal module error: 0x%08llX.", djiStat);
         return djiStat;
     }
 
-    if (osalHandler->MutexDestroy(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexDestroy(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex destroy error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (osalHandler->MutexDestroy(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexDestroy(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex destroy error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (osalHandler->MutexDestroy(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexDestroy(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex destroy error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
-
+//此函数改造完成
 T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
                                      T_DjiGimbalRotationProperty rotationProperty,
                                      T_DjiAttitude3d rotationValue)
@@ -222,144 +242,167 @@ T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
                    rotationProperty.rotationValueInvalidFlag.roll,
                    rotationProperty.rotationValueInvalidFlag.yaw);
 
-    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
         goto out2;
     }
 
-    switch (rotationMode) {
-        case DJI_GIMBAL_ROTATION_MODE_RELATIVE_ANGLE:
-            USER_LOG_INFO("gimbal relative rotate angle: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
-                          rotationValue.roll, rotationValue.yaw);
-            USER_LOG_DEBUG("gimbal relative rotate action time: %d.",
-                           rotationProperty.relativeAngleRotation.actionTime);
+    switch (rotationMode)
+    {
+    case DJI_GIMBAL_ROTATION_MODE_RELATIVE_ANGLE:
+        USER_LOG_INFO("gimbal relative rotate angle: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
+                      rotationValue.roll, rotationValue.yaw);
+        USER_LOG_DEBUG("gimbal relative rotate action time: %d.",
+                       rotationProperty.relativeAngleRotation.actionTime);
 
-            if (s_rotatingFlag == true) {
-                USER_LOG_WARN("gimbal is rotating.");
-                goto out1;
-            }
-
-            targetAttitudeDTemp.pitch =
-                rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch : (
-                    s_attitudeInformation.attitude.pitch + rotationValue.pitch);
-            targetAttitudeDTemp.roll =
-                rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll : (
-                    s_attitudeInformation.attitude.roll + rotationValue.roll);
-            targetAttitudeDTemp.yaw =
-                rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw : (
-                    s_attitudeInformation.attitude.yaw + rotationValue.yaw);
-
-            targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch;
-            targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
-            targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
-            DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
-            targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
-            targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
-            targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
-
-            s_targetAttitude = targetAttitudeDTemp;
-            s_rotatingFlag = true;
-            s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
-
-            djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
-                                                   rotationProperty.relativeAngleRotation.actionTime, &s_speed);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
-                returnCode = djiStat;
-                goto out1;
-            }
-
-            break;
-        case DJI_GIMBAL_ROTATION_MODE_ABSOLUTE_ANGLE:
-            USER_LOG_INFO("gimbal absolute rotate angle: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
-                          rotationValue.roll, rotationValue.yaw);
-            USER_LOG_DEBUG("gimbal absolute rotate action time: %d.",
-                           rotationProperty.absoluteAngleRotation.actionTime);
-            if (rotationProperty.absoluteAngleRotation.jointAngleValid) {
-                USER_LOG_DEBUG("gimbal joint angles: pitch %d, roll %d, yaw %d.",
-                               rotationProperty.absoluteAngleRotation.jointAngle.pitch,
-                               rotationProperty.absoluteAngleRotation.jointAngle.roll,
-                               rotationProperty.absoluteAngleRotation.jointAngle.yaw);
-            }
-
-            if (s_rotatingFlag == true) {
-                USER_LOG_WARN("gimbal is rotating.");
-                goto out1;
-            }
-
-            targetAttitudeDTemp.pitch =
-                rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch
-                                                                        : rotationValue.pitch;
-            targetAttitudeDTemp.roll =
-                rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll
-                                                                       : rotationValue.roll;
-            targetAttitudeDTemp.yaw =
-                rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw
-                                                                      : rotationValue.yaw;
-
-            targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch;
-            targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
-            targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
-            DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
-            targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
-            targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
-            targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
-
-            s_targetAttitude = targetAttitudeDTemp;
-            s_rotatingFlag = true;
-            s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
-
-            djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
-                                                   rotationProperty.absoluteAngleRotation.actionTime, &s_speed);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
-                returnCode = djiStat;
-                goto out1;
-            }
-
-            break;
-        case DJI_GIMBAL_ROTATION_MODE_SPEED:
-            USER_LOG_INFO("gimbal rotate speed: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
-                          rotationValue.roll, rotationValue.yaw);
-
-            if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE) {
-                USER_LOG_WARN("gimbal is rotating.");
-                goto out1;
-            }
-
-            memcpy(&speedTemp, &rotationValue, sizeof(T_DjiAttitude3d));
-            DjiTest_GimbalSpeedLegalization(&speedTemp);
-            s_speed = speedTemp;
-
-            if (rotationValue.pitch != 0 || rotationValue.roll != 0 || rotationValue.yaw != 0) {
-                s_rotatingFlag = true;
-                s_controlType = TEST_GIMBAL_CONTROL_TYPE_SPEED;
-            } else {
-                s_rotatingFlag = false;
-            }
-
-            break;
-        default:
-            USER_LOG_ERROR("gimbal rotation mode invalid: %d.", rotationMode);
-            returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT;
+        if (s_rotatingFlag == true)
+        {
+            USER_LOG_WARN("gimbal is rotating.");
             goto out1;
+        }
+
+        targetAttitudeDTemp.pitch =
+            rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch : (s_attitudeInformation.attitude.pitch + rotationValue.pitch);
+        targetAttitudeDTemp.roll =
+            rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll : (s_attitudeInformation.attitude.roll + rotationValue.roll);
+        targetAttitudeDTemp.yaw =
+            rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw : (s_attitudeInformation.attitude.yaw + rotationValue.yaw);
+
+        targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch;
+        targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
+        targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
+        DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
+        targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
+        targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
+        targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
+
+        s_targetAttitude = targetAttitudeDTemp;
+        s_rotatingFlag = true;
+        s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
+
+        // djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
+        //                                        rotationProperty.relativeAngleRotation.actionTime, &s_speed);
+        // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        // {
+        //     USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
+        //     returnCode = djiStat;
+        //     goto out1;
+        // }
+        // 改为直接调用SBGC角度控制
+        Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
+        Control.AxisC[PITCH].angle = sbgcAngleToDegree((float)s_targetAttitude.pitch / 10.0f); // unit: degree
+        Control.AxisC[PITCH].speed = sbgcSpeedToValue((float)s_speed.pitch / 10.0f);           // unit: degree/s
+        SBGC32_Control(&SBGC32_Device, &Control);
+        break;
+
+    case DJI_GIMBAL_ROTATION_MODE_ABSOLUTE_ANGLE:
+        USER_LOG_INFO("gimbal absolute rotate angle: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
+                      rotationValue.roll, rotationValue.yaw);
+        USER_LOG_DEBUG("gimbal absolute rotate action time: %d.",
+                       rotationProperty.absoluteAngleRotation.actionTime);
+        if (rotationProperty.absoluteAngleRotation.jointAngleValid)
+        {
+            USER_LOG_DEBUG("gimbal joint angles: pitch %d, roll %d, yaw %d.",
+                           rotationProperty.absoluteAngleRotation.jointAngle.pitch,
+                           rotationProperty.absoluteAngleRotation.jointAngle.roll,
+                           rotationProperty.absoluteAngleRotation.jointAngle.yaw);
+        }                       
+
+        if (s_rotatingFlag == true)  
+        {
+            USER_LOG_WARN("gimbal is rotating.");
+            goto out1;
+        }
+
+        targetAttitudeDTemp.pitch =
+            rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch
+                                                                    : rotationValue.pitch;
+        targetAttitudeDTemp.roll =
+            rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll
+                                                                   : rotationValue.roll;
+        targetAttitudeDTemp.yaw =
+            rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw
+                                                                  : rotationValue.yaw;
+
+        targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch ;
+        targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
+        targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
+        DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
+        targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
+        targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
+        targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
+
+        s_targetAttitude = targetAttitudeDTemp;
+        s_rotatingFlag = true;
+        s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
+
+        // djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
+        //                                        rotationProperty.absoluteAngleRotation.actionTime, &s_speed);
+        // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        // {
+        //     USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
+        //     returnCode = djiStat;
+        //     goto out1;
+        // }
+        Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
+        Control.AxisC[PITCH].angle = sbgcAngleToDegree((float)s_targetAttitude.pitch / 10.0f); // unit: degree
+        Control.AxisC[PITCH].speed = sbgcSpeedToValue((float)s_speed.pitch / 10.0f);           // unit: degree/s
+        SBGC32_Control(&SBGC32_Device, &Control);
+        break;
+    case DJI_GIMBAL_ROTATION_MODE_SPEED:
+        USER_LOG_INFO("gimbal rotate speed: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
+                      rotationValue.roll, rotationValue.yaw);
+
+        if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE)
+        {
+            USER_LOG_WARN("gimbal is rotating.");
+            goto out1;
+        }
+
+        memcpy(&speedTemp, &rotationValue, sizeof(T_DjiAttitude3d));
+        DjiTest_GimbalSpeedLegalization(&speedTemp);
+        s_speed = speedTemp;
+
+        if (rotationValue.pitch != 0 || rotationValue.roll != 0 || rotationValue.yaw != 0)
+        {
+            s_rotatingFlag = true;
+            s_controlType = TEST_GIMBAL_CONTROL_TYPE_SPEED;
+        }
+        else
+        {
+            s_rotatingFlag = false;
+        }
+
+        Control.mode[PITCH] = CtrlMODE_SPEED|CtrlFLAG_MIX_FOLLOW;
+        Control.AxisC[PITCH].speed = sbgcAngleToDegree((float)s_speed.pitch / 10.0f); // unit: degree/s
+        SBGC32_Control(&SBGC32_Device, &Control);
+
+        break;
+    default:
+        USER_LOG_ERROR("gimbal rotation mode invalid: %d.", rotationMode);
+        returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT;
+        goto out1;
     }
 
 out1:
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
         goto out2;
     }
 
 out2:
-    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -390,31 +433,41 @@ static void *UserGimbal_Task(void *arg)
 
     djiStat = DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION, DJI_DATA_SUBSCRIPTION_TOPIC_10_HZ,
                                                NULL);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        if (djiStat == DJI_ERROR_SUBSCRIPTION_MODULE_CODE_TOPIC_DUPLICATE) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
+        if (djiStat == DJI_ERROR_SUBSCRIPTION_MODULE_CODE_TOPIC_DUPLICATE)
+        {
             USER_LOG_WARN("Subscribe topic quaternion duplicate.");
-        } else {
+        }
+        else
+        {
             USER_LOG_ERROR("Subscribe topic quaternion error.");
         }
-    } else {
+    }
+    else
+    {
         USER_LOG_DEBUG("Subscribe topic quaternion success.");
     }
 
-    while (1) {
+    while (1)
+    {
         osalHandler->TaskSleepMs(1000 / PAYLOAD_GIMBAL_TASK_FREQ);
         step++;
 
-        if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("mutex lock error");
             continue;
         }
 
-        if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("mutex lock error");
             goto out2;
         }
 
-        if (USER_UTIL_IS_WORK_TURN(step, 1, PAYLOAD_GIMBAL_TASK_FREQ)) {
+        if (USER_UTIL_IS_WORK_TURN(step, 1, PAYLOAD_GIMBAL_TASK_FREQ))
+        {
             USER_LOG_DEBUG("gimbal attitude: pitch %d, roll %d, yaw %d.", s_attitudeInformation.attitude.pitch,
                            s_attitudeInformation.attitude.roll, s_attitudeInformation.attitude.yaw);
 
@@ -423,48 +476,54 @@ static void *UserGimbal_Task(void *arg)
         }
 
         // update aircraft attitude
-        if (USER_UTIL_IS_WORK_TURN(step, 50, PAYLOAD_GIMBAL_TASK_FREQ)) {
+        if (USER_UTIL_IS_WORK_TURN(step, 50, PAYLOAD_GIMBAL_TASK_FREQ))
+        {
             djiStat = DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION,
-                                                              (uint8_t *) &quaternion,
+                                                              (uint8_t *)&quaternion,
                                                               sizeof(T_DjiFcSubscriptionQuaternion),
                                                               &timestamp);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("get topic quaternion value error.");
             }
 
             djiStat = DjiTest_GimbalCalculateGroundAttitudeBaseQuaternion(quaternion, &s_aircraftAttitude);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("calculate and update aircraft attitude error.");
             }
         }
 
         // stable control
-        switch (s_systemState.gimbalMode) {
-            case DJI_GIMBAL_MODE_FREE:
-                break;
-            case DJI_GIMBAL_MODE_FPV:
-                s_attitudeInformation.attitude.roll += (s_aircraftAttitude.roll - s_lastAircraftAttitude.roll);
-                s_attitudeInformation.attitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
+        switch (s_systemState.gimbalMode)
+        {
+        case DJI_GIMBAL_MODE_FREE:
+            break;
+        case DJI_GIMBAL_MODE_FPV:
+            s_attitudeInformation.attitude.roll += (s_aircraftAttitude.roll - s_lastAircraftAttitude.roll);
+            s_attitudeInformation.attitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
 
-                s_attitudeHighPrecision.roll += (float) (s_aircraftAttitude.roll - s_lastAircraftAttitude.roll);
-                s_attitudeHighPrecision.yaw += (float) (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
+            s_attitudeHighPrecision.roll += (float)(s_aircraftAttitude.roll - s_lastAircraftAttitude.roll);
+            s_attitudeHighPrecision.yaw += (float)(s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
 
-                if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE) {
-                    s_targetAttitude.roll += (s_aircraftAttitude.roll - s_lastAircraftAttitude.roll);
-                    s_targetAttitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
-                }
-                break;
-            case DJI_GIMBAL_MODE_YAW_FOLLOW:
-                s_attitudeInformation.attitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
+            if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE)
+            {
+                s_targetAttitude.roll += (s_aircraftAttitude.roll - s_lastAircraftAttitude.roll);
+                s_targetAttitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
+            }
+            break;
+        case DJI_GIMBAL_MODE_YAW_FOLLOW:
+            s_attitudeInformation.attitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
 
-                s_attitudeHighPrecision.yaw += (float) (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
+            s_attitudeHighPrecision.yaw += (float)(s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
 
-                if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE) {
-                    s_targetAttitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
-                }
-                break;
-            default:
-                USER_LOG_ERROR("gimbal mode invalid: %d.", s_systemState.gimbalMode);
+            if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE)
+            {
+                s_targetAttitude.yaw += (s_aircraftAttitude.yaw - s_lastAircraftAttitude.yaw);
+            }
+            break;
+        default:
+            USER_LOG_ERROR("gimbal mode invalid: %d.", s_systemState.gimbalMode);
         }
         s_lastAircraftAttitude = s_aircraftAttitude;
 
@@ -491,12 +550,14 @@ static void *UserGimbal_Task(void *arg)
             goto out1;
 
         nextAttitude.pitch =
-            (float) s_attitudeHighPrecision.pitch + (float) s_speed.pitch / (float) PAYLOAD_GIMBAL_TASK_FREQ;
+            (float)s_attitudeHighPrecision.pitch + (float)s_speed.pitch / (float)PAYLOAD_GIMBAL_TASK_FREQ;
         nextAttitude.roll =
-            (float) s_attitudeHighPrecision.roll + (float) s_speed.roll / (float) PAYLOAD_GIMBAL_TASK_FREQ;
-        nextAttitude.yaw = (float) s_attitudeHighPrecision.yaw + (float) s_speed.yaw / (float) PAYLOAD_GIMBAL_TASK_FREQ;
+            (float)s_attitudeHighPrecision.roll + (float)s_speed.roll / (float)PAYLOAD_GIMBAL_TASK_FREQ;
+        nextAttitude.yaw =
+            (float)s_attitudeHighPrecision.yaw + (float)s_speed.yaw / (float)PAYLOAD_GIMBAL_TASK_FREQ;
 
-        if (s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE) {
+        if (s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE)
+        {
             nextAttitude.pitch =
                 (nextAttitude.pitch - s_targetAttitude.pitch) * s_speed.pitch >= 0 ? s_targetAttitude.pitch
                                                                                    : nextAttitude.pitch;
@@ -507,6 +568,7 @@ static void *UserGimbal_Task(void *arg)
         }
 
         DjiTest_GimbalAngleLegalization(&nextAttitude, s_aircraftAttitude, &s_attitudeInformation.reachLimitFlag);
+
         s_attitudeInformation.attitude.pitch = nextAttitude.pitch;
         s_attitudeInformation.attitude.roll = nextAttitude.roll;
         s_attitudeInformation.attitude.yaw = nextAttitude.yaw;
@@ -515,37 +577,46 @@ static void *UserGimbal_Task(void *arg)
         s_attitudeHighPrecision.roll = nextAttitude.roll;
         s_attitudeHighPrecision.yaw = nextAttitude.yaw;
 
-        if (s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE) {
-            if (memcmp(&s_attitudeInformation.attitude, &s_targetAttitude, sizeof(T_DjiAttitude3d)) == 0) {
+        if (s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE)
+        {
+            if (memcmp(&s_attitudeInformation.attitude, &s_targetAttitude, sizeof(T_DjiAttitude3d)) == 0)
+            {
                 s_rotatingFlag = false;
             }
-        } else if (s_controlType == TEST_GIMBAL_CONTROL_TYPE_SPEED) {
+        }
+        else if (s_controlType == TEST_GIMBAL_CONTROL_TYPE_SPEED)
+        {
             if ((s_attitudeInformation.reachLimitFlag.pitch == true || s_speed.pitch == 0) &&
                 (s_attitudeInformation.reachLimitFlag.roll == true || s_speed.roll == 0) &&
-                (s_attitudeInformation.reachLimitFlag.yaw == true || s_speed.yaw == 0)) {
+                (s_attitudeInformation.reachLimitFlag.yaw == true || s_speed.yaw == 0))
+            {
                 s_rotatingFlag = false;
             }
         }
 
-out1:
-        if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    out1:
+        if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("mutex unlock error");
             goto out2;
         }
 
-out2:
-        if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    out2:
+        if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("mutex unlock error");
             continue;
         }
 
         djiStat = osalHandler->GetTimeMs(&currentTime);
-        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("get current time error: 0x%08llX.", djiStat);
             continue;
         }
 
-        if (osalHandler->MutexLock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (osalHandler->MutexLock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("mutex lock error");
             continue;
         }
@@ -555,14 +626,16 @@ out2:
             goto unlockCalibrationMutex;
 
         progressTemp = (currentTime - s_calibrationStartTime) * 100 / PAYLOAD_GIMBAL_CALIBRATION_TIME_MS;
-        if (progressTemp >= 100) {
+        if (progressTemp >= 100)
+        {
             s_calibrationState.calibratingFlag = false;
             s_calibrationState.currentCalibrationProgress = 100;
             s_calibrationState.currentCalibrationStage = DJI_GIMBAL_CALIBRATION_STAGE_COMPLETE;
         }
 
-unlockCalibrationMutex:
-        if (osalHandler->MutexUnlock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    unlockCalibrationMutex:
+        if (osalHandler->MutexUnlock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("mutex unlock error");
             continue;
         }
@@ -577,14 +650,16 @@ static T_DjiReturnCode GetSystemState(T_DjiGimbalSystemState *systemState)
 {
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     *systemState = s_systemState;
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -596,14 +671,16 @@ static T_DjiReturnCode GetAttitudeInformation(T_DjiGimbalAttitudeInformation *at
 {
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     *attitudeInformation = s_attitudeInformation;
 
-    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -615,14 +692,16 @@ static T_DjiReturnCode GetCalibrationState(T_DjiGimbalCalibrationState *calibrat
 {
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     *calibrationState = s_calibrationState;
 
-    if (osalHandler->MutexUnlock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -634,14 +713,16 @@ static T_DjiReturnCode GetRotationSpeed(T_DjiAttitude3d *rotationSpeed)
 {
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     *rotationSpeed = s_speed;
 
-    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -653,7 +734,8 @@ static T_DjiReturnCode GetJointAngle(T_DjiAttitude3d *jointAngle)
 {
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -662,7 +744,8 @@ static T_DjiReturnCode GetJointAngle(T_DjiAttitude3d *jointAngle)
     jointAngle->roll = s_attitudeInformation.attitude.roll - s_aircraftAttitude.roll;
     jointAngle->yaw = s_attitudeInformation.attitude.yaw - s_aircraftAttitude.yaw;
 
-    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -678,11 +761,13 @@ static T_DjiReturnCode StartCalibrate(void)
     USER_LOG_INFO("start calibrate gimbal.");
 
     djiStat = osalHandler->GetTimeMs(&s_calibrationStartTime);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("get start time error: 0x%08llX.", djiStat);
     }
 
-    if (osalHandler->MutexLock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -691,7 +776,8 @@ static T_DjiReturnCode StartCalibrate(void)
     s_calibrationState.currentCalibrationProgress = 0;
     s_calibrationState.currentCalibrationStage = DJI_GIMBAL_CALIBRATION_STAGE_PROCRESSING;
 
-    if (osalHandler->MutexUnlock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_calibrationMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -704,7 +790,8 @@ static T_DjiReturnCode SetControllerSmoothFactor(uint8_t smoothingFactor, E_DjiG
     USER_LOG_INFO("set gimbal controller smooth factor: factor %d, axis %d.", smoothingFactor, axis);
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -716,7 +803,8 @@ static T_DjiReturnCode SetControllerSmoothFactor(uint8_t smoothingFactor, E_DjiG
     else
         USER_LOG_ERROR("axis is not supported.");
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -729,14 +817,16 @@ static T_DjiReturnCode SetPitchRangeExtensionEnabled(bool enabledFlag)
     USER_LOG_INFO("set gimbal pitch range extension enable flag: %d.", enabledFlag);
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     s_systemState.pitchRangeExtensionEnabledFlag = enabledFlag;
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -750,7 +840,8 @@ static T_DjiReturnCode SetControllerMaxSpeedPercentage(uint8_t maxSpeedPercentag
 
     USER_LOG_INFO("set gimbal controller max speed: max speed %d, axis %d.", maxSpeedPercentage, axis);
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -762,7 +853,8 @@ static T_DjiReturnCode SetControllerMaxSpeedPercentage(uint8_t maxSpeedPercentag
     else
         USER_LOG_ERROR("axis is not supported.");
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -776,7 +868,8 @@ static T_DjiReturnCode RestoreFactorySettings(void)
 
     USER_LOG_INFO("restore gimbal factory settings.");
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -788,7 +881,8 @@ static T_DjiReturnCode RestoreFactorySettings(void)
     s_systemState.maxSpeedPercentage.pitch = 1;
     s_systemState.maxSpeedPercentage.yaw = 1;
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -802,14 +896,16 @@ static T_DjiReturnCode SetMode(E_DjiGimbalMode mode)
 
     USER_LOG_INFO("set gimbal mode: %d.", mode);
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     s_systemState.gimbalMode = mode;
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -825,50 +921,53 @@ static T_DjiReturnCode Reset(E_DjiGimbalResetMode mode)
 
     USER_LOG_INFO("reset gimbal: %d.", mode);
 
-    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         djiReturnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
         goto unlock2;
     }
 
-    switch (mode) {
-        case DJI_GIMBAL_RESET_MODE_YAW:
-            s_attitudeInformation.attitude.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
+    switch (mode)
+    {
+    case DJI_GIMBAL_RESET_MODE_YAW:
+        s_attitudeInformation.attitude.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
 
-            s_attitudeHighPrecision.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
-            break;
-        case DJI_GIMBAL_RESET_MODE_PITCH_AND_YAW:
-            s_attitudeInformation.attitude.pitch = s_systemState.fineTuneAngle.pitch;
-            s_attitudeInformation.attitude.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
+        s_attitudeHighPrecision.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
+        break;
+    case DJI_GIMBAL_RESET_MODE_PITCH_AND_YAW:
+        s_attitudeInformation.attitude.pitch = s_systemState.fineTuneAngle.pitch;
+        s_attitudeInformation.attitude.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
 
-            s_attitudeHighPrecision.pitch = s_systemState.fineTuneAngle.pitch;
-            s_attitudeHighPrecision.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
-            break;
-        case DJI_GIMBAL_RESET_MODE_PITCH_DOWNWARD_UPWARD_AND_YAW:
-            s_attitudeInformation.attitude.pitch =
-                s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
-            s_attitudeInformation.attitude.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
+        s_attitudeHighPrecision.pitch = s_systemState.fineTuneAngle.pitch;
+        s_attitudeHighPrecision.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
+        break;
+    case DJI_GIMBAL_RESET_MODE_PITCH_DOWNWARD_UPWARD_AND_YAW:
+        s_attitudeInformation.attitude.pitch =
+            s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
+        s_attitudeInformation.attitude.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
 
-            s_attitudeHighPrecision.pitch =
-                s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
-            s_attitudeHighPrecision.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
-            break;
-        case DJI_GIMBAL_RESET_MODE_PITCH_DOWNWARD_UPWARD:
-            s_attitudeInformation.attitude.pitch =
-                s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
+        s_attitudeHighPrecision.pitch =
+            s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
+        s_attitudeHighPrecision.yaw = s_aircraftAttitude.yaw + s_systemState.fineTuneAngle.yaw;
+        break;
+    case DJI_GIMBAL_RESET_MODE_PITCH_DOWNWARD_UPWARD:
+        s_attitudeInformation.attitude.pitch =
+            s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
 
-            s_attitudeHighPrecision.pitch =
-                s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
-            break;
-        default:
-            USER_LOG_ERROR("reset mode is invalid: %d.", mode);
-            djiReturnCode = DJI_ERROR_SYSTEM_MODULE_CODE_INVALID_PARAMETER;
-            goto unlock1;
+        s_attitudeHighPrecision.pitch =
+            s_systemState.fineTuneAngle.pitch + (s_systemState.mountedUpward ? 900 : -900);
+        break;
+    default:
+        USER_LOG_ERROR("reset mode is invalid: %d.", mode);
+        djiReturnCode = DJI_ERROR_SYSTEM_MODULE_CODE_INVALID_PARAMETER;
+        goto unlock1;
     }
 
     attitudeFTemp.pitch = s_attitudeInformation.attitude.pitch;
@@ -883,14 +982,16 @@ static T_DjiReturnCode Reset(E_DjiGimbalResetMode mode)
     s_rotatingFlag = false;
 
 unlock1:
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         djiReturnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
         goto unlock2;
     }
 
 unlock2:
-    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -910,7 +1011,8 @@ static T_DjiReturnCode FineTuneAngle(T_DjiAttitude3d fineTuneAngle)
     USER_LOG_INFO("gimbal fine tune angle: pitch %d, roll %d, yaw %d.", fineTuneAngle.pitch,
                   fineTuneAngle.roll, fineTuneAngle.yaw);
 
-    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -931,7 +1033,8 @@ static T_DjiReturnCode FineTuneAngle(T_DjiAttitude3d fineTuneAngle)
     s_attitudeHighPrecision.yaw += fineTuneAngle.yaw;
     DjiTest_GimbalAngleLegalization(&s_attitudeHighPrecision, s_aircraftAttitude, NULL);
 
-    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexLock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex lock error");
         djiReturnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
         goto unlock;
@@ -948,14 +1051,16 @@ static T_DjiReturnCode FineTuneAngle(T_DjiAttitude3d fineTuneAngle)
     s_systemState.fineTuneAngle.roll = attitudeFTemp.roll;
     s_systemState.fineTuneAngle.yaw = attitudeFTemp.yaw;
 
-    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         djiReturnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
         goto unlock;
     }
 
 unlock:
-    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (osalHandler->MutexUnlock(s_attitudeMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("mutex unlock error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -964,7 +1069,8 @@ unlock:
          fineTuneAngle.pitch != 0) ||
         ((attitudeReachLimitFlag.roll == true || fineTuneAngleReachLimitFlag.roll == true) &&
          fineTuneAngle.roll != 0) ||
-        ((attitudeReachLimitFlag.yaw == true || fineTuneAngleReachLimitFlag.yaw == true) && fineTuneAngle.yaw != 0)) {
+        ((attitudeReachLimitFlag.yaw == true || fineTuneAngleReachLimitFlag.yaw == true) && fineTuneAngle.yaw != 0))
+    {
         return DJI_ERROR_SYSTEM_MODULE_CODE_OUT_OF_RANGE;
     }
 
@@ -989,7 +1095,8 @@ static T_DjiReturnCode DjiTest_GimbalAngleLegalization(T_DjiAttitude3f *attitude
     T_DjiAttitude3d finalAngleLimitInBodyCoordinateMax = {0};
     T_DjiAttitude3f attitudeInBodyCoordinate = {0};
 
-    if (attitude == NULL) {
+    if (attitude == NULL)
+    {
         USER_LOG_ERROR("input pointer is null.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_INVALID_PARAMETER;
     }
@@ -997,7 +1104,8 @@ static T_DjiReturnCode DjiTest_GimbalAngleLegalization(T_DjiAttitude3f *attitude
     // calculate euler angle limit
     eulerAngleLimitMin = s_eulerAngleLimitMin;
     eulerAngleLimitMax = s_eulerAngleLimitMax;
-    if (s_systemState.pitchRangeExtensionEnabledFlag == true) {
+    if (s_systemState.pitchRangeExtensionEnabledFlag == true)
+    {
         eulerAngleLimitMin.pitch = s_pitchEulerAngleExtensionMin;
         eulerAngleLimitMax.pitch = s_pitchEulerAngleExtensionMax;
     }
@@ -1025,37 +1133,44 @@ static T_DjiReturnCode DjiTest_GimbalAngleLegalization(T_DjiAttitude3f *attitude
                                                            s_jointAngleLimitMax.yaw);
 
     // calculate gimbal attitude in body coordinate
-    attitudeInBodyCoordinate.pitch = attitude->pitch - (float) aircraftAttitude.pitch;
-    attitudeInBodyCoordinate.roll = attitude->roll - (float) aircraftAttitude.roll;
-    attitudeInBodyCoordinate.yaw = attitude->yaw - (float) aircraftAttitude.yaw;
+    attitudeInBodyCoordinate.pitch = attitude->pitch - (float)aircraftAttitude.pitch;
+    attitudeInBodyCoordinate.roll = attitude->roll - (float)aircraftAttitude.roll;
+    attitudeInBodyCoordinate.yaw = attitude->yaw - (float)aircraftAttitude.yaw;
 
     // modify attitude based on final angle limit
     attitudeInBodyCoordinate.pitch = USER_UTIL_MIN(attitudeInBodyCoordinate.pitch,
-                                                   (float) finalAngleLimitInBodyCoordinateMax.pitch);
+                                                   (float)finalAngleLimitInBodyCoordinateMax.pitch);
     attitudeInBodyCoordinate.pitch = USER_UTIL_MAX(attitudeInBodyCoordinate.pitch,
-                                                   (float) finalAngleLimitInBodyCoordinateMin.pitch);
+                                                   (float)finalAngleLimitInBodyCoordinateMin.pitch);
     attitudeInBodyCoordinate.roll = USER_UTIL_MIN(attitudeInBodyCoordinate.roll,
-                                                  (float) finalAngleLimitInBodyCoordinateMax.roll);
+                                                  (float)finalAngleLimitInBodyCoordinateMax.roll);
     attitudeInBodyCoordinate.roll = USER_UTIL_MAX(attitudeInBodyCoordinate.roll,
-                                                  (float) finalAngleLimitInBodyCoordinateMin.roll);
+                                                  (float)finalAngleLimitInBodyCoordinateMin.roll);
     attitudeInBodyCoordinate.yaw = USER_UTIL_MIN(attitudeInBodyCoordinate.yaw,
-                                                 (float) finalAngleLimitInBodyCoordinateMax.yaw);
+                                                 (float)finalAngleLimitInBodyCoordinateMax.yaw);
     attitudeInBodyCoordinate.yaw = USER_UTIL_MAX(attitudeInBodyCoordinate.yaw,
-                                                 (float) finalAngleLimitInBodyCoordinateMin.yaw);
+                                                 (float)finalAngleLimitInBodyCoordinateMin.yaw);
 
     // calculate gimbal attitude in ground coordinate
-    attitude->pitch = attitudeInBodyCoordinate.pitch + (float) aircraftAttitude.pitch;
-    attitude->roll = attitudeInBodyCoordinate.roll + (float) aircraftAttitude.roll;
-    attitude->yaw = attitudeInBodyCoordinate.yaw + (float) aircraftAttitude.yaw;
+    attitude->pitch = attitudeInBodyCoordinate.pitch + (float)aircraftAttitude.pitch;
+    attitude->roll = attitudeInBodyCoordinate.roll + (float)aircraftAttitude.roll;
+    attitude->yaw = attitudeInBodyCoordinate.yaw + (float)aircraftAttitude.yaw;
 
     // calculate reach limit flag, please note reach limit flag only specifies whether gimbal attitude reach joint angle limit
-    if (reachLimitFlag != NULL) {
+    if (reachLimitFlag != NULL)
+    {
         reachLimitFlag->pitch = (attitudeInBodyCoordinate.pitch >= s_jointAngleLimitMax.pitch ||
-                                 attitudeInBodyCoordinate.pitch <= s_jointAngleLimitMin.pitch) ? true : false;
+                                 attitudeInBodyCoordinate.pitch <= s_jointAngleLimitMin.pitch)
+                                    ? true
+                                    : false;
         reachLimitFlag->roll = (attitudeInBodyCoordinate.roll >= s_jointAngleLimitMax.roll ||
-                                attitudeInBodyCoordinate.roll <= s_jointAngleLimitMin.roll) ? true : false;
+                                attitudeInBodyCoordinate.roll <= s_jointAngleLimitMin.roll)
+                                   ? true
+                                   : false;
         reachLimitFlag->yaw = (attitudeInBodyCoordinate.yaw >= s_jointAngleLimitMax.yaw ||
-                               attitudeInBodyCoordinate.yaw <= s_jointAngleLimitMin.yaw) ? true : false;
+                               attitudeInBodyCoordinate.yaw <= s_jointAngleLimitMin.yaw)
+                                  ? true
+                                  : false;
     }
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
@@ -1077,23 +1192,25 @@ DjiTest_GimbalCalculateSpeed(T_DjiAttitude3d originalAttitude, T_DjiAttitude3d t
     float rollSpeedTemp = 0;
     float yawSpeedTemp = 0;
 
-    if (speed == NULL) {
+    if (speed == NULL)
+    {
         USER_LOG_ERROR("input pointer is null.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_INVALID_PARAMETER;
     }
 
-    if (actionTime == 0) {
+    if (actionTime == 0)
+    {
         USER_LOG_WARN("Input action time is zero, now used max speed to rotate.");
         actionTime = PAYLOAD_GIMBAL_MIN_ACTION_TIME;
     }
 
-    pitchSpeedTemp = (float) (targetAttitude.pitch - originalAttitude.pitch) / (float) actionTime * 100;
-    rollSpeedTemp = (float) (targetAttitude.roll - originalAttitude.roll) / (float) actionTime * 100;
-    yawSpeedTemp = (float) (targetAttitude.yaw - originalAttitude.yaw) / (float) actionTime * 100;
+    pitchSpeedTemp = (float)(targetAttitude.pitch - originalAttitude.pitch) / (float)actionTime * 100;
+    rollSpeedTemp = (float)(targetAttitude.roll - originalAttitude.roll) / (float)actionTime * 100;
+    yawSpeedTemp = (float)(targetAttitude.yaw - originalAttitude.yaw) / (float)actionTime * 100;
 
-    speed->pitch = pitchSpeedTemp >= 0.0f ? (int32_t) (pitchSpeedTemp + 1) : (int32_t) (pitchSpeedTemp - 1);
-    speed->roll = rollSpeedTemp >= 0.0f ? (int32_t) (rollSpeedTemp + 1) : (int32_t) (rollSpeedTemp - 1);
-    speed->yaw = yawSpeedTemp >= 0.0f ? (int32_t) (yawSpeedTemp + 1) : (int32_t) (yawSpeedTemp - 1);
+    speed->pitch = pitchSpeedTemp >= 0.0f ? (int32_t)(pitchSpeedTemp + 1) : (int32_t)(pitchSpeedTemp - 1);
+    speed->roll = rollSpeedTemp >= 0.0f ? (int32_t)(rollSpeedTemp + 1) : (int32_t)(rollSpeedTemp - 1);
+    speed->yaw = yawSpeedTemp >= 0.0f ? (int32_t)(yawSpeedTemp + 1) : (int32_t)(yawSpeedTemp - 1);
 
     DjiTest_GimbalSpeedLegalization(speed);
 
@@ -1124,22 +1241,23 @@ static T_DjiReturnCode DjiTest_GimbalCalculateGroundAttitudeBaseQuaternion(T_Dji
     double aircraftRollInRad;
     double aircraftYawInRad;
 
-    if (attitude == NULL) {
+    if (attitude == NULL)
+    {
         USER_LOG_ERROR("Input argument is null.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_INVALID_PARAMETER;
     }
 
-    aircraftPitchInRad = asin(2 * ((double) quaternion.q0 * quaternion.q2 - (double) quaternion.q3 * quaternion.q1));
+    aircraftPitchInRad = asin(2 * ((double)quaternion.q0 * quaternion.q2 - (double)quaternion.q3 * quaternion.q1));
     attitude->pitch = aircraftPitchInRad * 180 / DJI_PI * 10;
 
-    aircraftRollInRad = atan2(2 * ((double) quaternion.q0 * quaternion.q1 + (double) quaternion.q2 * quaternion.q3),
-                              (double) 1 -
-                              2 * ((double) quaternion.q1 * quaternion.q1 + (double) quaternion.q2 * quaternion.q2));
+    aircraftRollInRad = atan2(2 * ((double)quaternion.q0 * quaternion.q1 + (double)quaternion.q2 * quaternion.q3),
+                              (double)1 -
+                                  2 * ((double)quaternion.q1 * quaternion.q1 + (double)quaternion.q2 * quaternion.q2));
     attitude->roll = aircraftRollInRad * 180 / DJI_PI * 10;
 
-    aircraftYawInRad = atan2(2 * ((double) quaternion.q0 * quaternion.q3 + (double) quaternion.q1 * quaternion.q2),
-                             (double) 1 -
-                             2 * ((double) quaternion.q2 * quaternion.q2 + (double) quaternion.q3 * quaternion.q3));
+    aircraftYawInRad = atan2(2 * ((double)quaternion.q0 * quaternion.q3 + (double)quaternion.q1 * quaternion.q2),
+                             (double)1 -
+                                 2 * ((double)quaternion.q2 * quaternion.q2 + (double)quaternion.q3 * quaternion.q3));
     attitude->yaw = aircraftYawInRad * 180 / DJI_PI * 10;
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;

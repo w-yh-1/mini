@@ -146,7 +146,7 @@ T_DjiReturnCode DjiTest_CameraEmuMediaStartService(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
     T_DjiReturnCode returnCode;
     const T_DjiDataChannelBandwidthProportionOfHighspeedChannel bandwidthProportionOfHighspeedChannel =
-        {10, 60, 30};
+        {10, 80, 10};// 10% data channel, 80% video channel, 10% download channel
     T_DjiAircraftInfoBaseInfo aircraftInfoBaseInfo = {0};
 
     if (DjiAircraftInfo_GetBaseInfo(&aircraftInfoBaseInfo) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
@@ -548,16 +548,31 @@ static T_DjiReturnCode DjiPlayback_VideoFileTranscode(const char *inPath, const 
         returnCode = djiStatus;
         goto out;
     }
-
-    snprintf(outPath, outPathBufferSize, "%sout.%s", directory, outFormat);
-    snprintf(ffmpegCmdStr, FFMPEG_CMD_BUF_SIZE,
-             "echo \"y\" | ffmpeg -i \"%s\" -codec copy -f \"%s\" \"%s\" 1>/dev/null 2>&1", inPath,
-             outFormat, outPath);
-    fpCommand = popen(ffmpegCmdStr, "r");
-    if (fpCommand == NULL) {
-        USER_LOG_ERROR("execute transcode command fail.");
-        returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    if (strcmp("h264", outFormat) == 0)
+    {
+        memset(outPath, 0, 256);
+        sprintf(outPath,"/mnt/sdcard/H264/%s",inPath+strlen(directory));
+        strcpy(outPath+strlen(outPath)-3, outFormat);
+    }
+    // snprintf(outPath, outPathBufferSize, "%sout.%s", directory, outFormat);
+    if (access(outPath, F_OK) == 0)
+    {
+        USER_LOG_ERROR("execute transcode command ok.");
         goto out;
+    }
+    else
+    {
+        USER_LOG_ERROR("%s not exist.", outPath);
+        snprintf(ffmpegCmdStr, FFMPEG_CMD_BUF_SIZE,
+                 "echo \"y\" | ffmpeg -i \"%s\" -codec copy -f \"%s\" \"%s\" 1>/dev/null 2>&1", inPath,
+                 outFormat, outPath);
+        fpCommand = popen(ffmpegCmdStr, "r");
+        if (fpCommand == NULL)
+        {
+            USER_LOG_ERROR("execute transcode command fail.");
+            returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+            goto out;
+        }
     }
 
     pclose(fpCommand);
@@ -1139,8 +1154,8 @@ static T_DjiReturnCode StopDownloadNotification(void)
     USER_LOG_DEBUG("media download stop notification.");
 
     bandwidthProportion.dataStream = 10;
-    bandwidthProportion.videoStream = 60;
-    bandwidthProportion.downloadStream = 30;
+    bandwidthProportion.videoStream = 80;
+    bandwidthProportion.downloadStream = 10;
 
     returnCode = DjiHighSpeedDataChannel_SetBandwidthProportion(bandwidthProportion);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
@@ -1196,6 +1211,7 @@ static void *UserCameraMedia_SendVideoTask(void *arg)
         USER_LOG_ERROR("Get file current path error, stat = 0x%08llX", returnCode);
         exit(1);
     }
+
     if (s_isMediaFileDirPathConfigured == true) {
         snprintf(tempPath, DJI_FILE_PATH_SIZE_MAX, "%smedia_file/PSDK_0005.h264", s_mediaFileDirPath);
     } else {
@@ -1204,7 +1220,7 @@ static void *UserCameraMedia_SendVideoTask(void *arg)
 
     videoFilePath = osalHandler->Malloc(DJI_FILE_PATH_SIZE_MAX);
     if (videoFilePath == NULL) {
-        USER_LOG_ERROR("malloc memory for video file path fail.");
+        USER_LOG_ERROR("malloc memory for video file path fail."); 
         exit(1);
     }
 
@@ -1250,7 +1266,7 @@ static void *UserCameraMedia_SendVideoTask(void *arg)
         if (osalHandler->MutexUnlock(s_mediaPlayCommandBufferMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
             USER_LOG_ERROR("mutex unlock error");
             continue;
-        }
+        } 
 
         if (bufferReadSize != sizeof(T_TestPayloadCameraPlaybackCommand))
             goto send;
@@ -1259,8 +1275,9 @@ static void *UserCameraMedia_SendVideoTask(void *arg)
             case TEST_PAYLOAD_CAMERA_MEDIA_PLAY_COMMAND_STOP:
                 snprintf(videoFilePath, DJI_FILE_PATH_SIZE_MAX, "%s", tempPath);
                 startTimeMs = 0;
-                sendVideoFlag = true;
+                sendVideoFlag = false;
                 sendOneTimeFlag = false;
+                goto send;
                 break;
             case TEST_PAYLOAD_CAMERA_MEDIA_PLAY_COMMAND_PAUSE:
                 sendVideoFlag = false;
@@ -1275,18 +1292,20 @@ static void *UserCameraMedia_SendVideoTask(void *arg)
                 USER_LOG_ERROR("playback command invalid: %d.", playbackCommand.command);
                 sendVideoFlag = false;
                 goto send;
+                
         }
 
         // video send preprocess
-        returnCode = DjiPlayback_VideoFileTranscode(videoFilePath, "h264", transcodedFilePath,
-                                                    DJI_FILE_PATH_SIZE_MAX);
-        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-            USER_LOG_ERROR("transcode video file error: 0x%08llX.", returnCode);
-            continue;
-        }
-
+        // returnCode = DjiPlayback_VideoFileTranscode(videoFilePath, "h264", transcodedFilePath,
+        //                                             DJI_FILE_PATH_SIZE_MAX);
+        // if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        //     USER_LOG_ERROR("transcode video file error: 0x%08llX.", returnCode);
+        //     continue;
+        // }
+        //设置transcodedFilePath为videoFilePath
+        snprintf(transcodedFilePath, DJI_FILE_PATH_SIZE_MAX, "%s", videoFilePath);
         returnCode = DjiPlayback_GetFrameRateOfVideoFile(transcodedFilePath, &frameRate);
-        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) { 
             USER_LOG_ERROR("get frame rate of video error: 0x%08llX.", returnCode);
             continue;
         }
@@ -1315,11 +1334,10 @@ static void *UserCameraMedia_SendVideoTask(void *arg)
         }
 
         send:
-            if (fpFile == NULL) {
-                USER_LOG_ERROR("open video file fail.");
-                continue;
-            }
-
+            // if (fpFile == NULL) {
+            //     USER_LOG_ERROR("open video file fail.");
+            //     continue;
+            // }
             if (sendVideoFlag != true)
                 continue;
 

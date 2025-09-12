@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.5)
-project(dji_sdk_demo_linux C)
+project(dji_sdk_demo_linux C CXX)
 
 set(CMAKE_C_FLAGS "-pthread -std=gnu99")
 set(CMAKE_CXX_FLAGS "-std=c++11 -pthread")
 set(CMAKE_EXE_LINKER_FLAGS "-pthread")
-set(CMAKE_C_COMPILER "gcc")
-set(CMAKE_CXX_COMPILER "g++")
+# set(CMAKE_C_COMPILER "gcc")
+# set(CMAKE_CXX_COMPILER "g++")
 add_definitions(-D_GNU_SOURCE)
 
 if (NOT USE_SYSTEM_ARCH)
@@ -21,9 +21,10 @@ endif ()
 set(PACKAGE_NAME payloadsdk)
 
 ## "uname -m" to auto distinguish Manifold2-G or Manifold2-C
-execute_process(COMMAND uname -m
-        OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
+# execute_process(COMMAND uname -m
+#         OUTPUT_VARIABLE DEVICE_SYSTEM_ID)
 
+SET(DEVICE_SYSTEM_ID aarch64)
 if (DEVICE_SYSTEM_ID MATCHES x86_64)
     set(TOOLCHAIN_NAME x86_64-linux-gnu-gcc)
     add_definitions(-DPLATFORM_ARCH_x86_64=1)
@@ -38,11 +39,11 @@ file(GLOB_RECURSE MODULE_COMMON_SRC ../common/*.c)
 file(GLOB_RECURSE MODULE_HAL_SRC hal/*.c)
 file(GLOB_RECURSE MODULE_APP_SRC application/*.c)
 file(GLOB_RECURSE MODULE_SAMPLE_SRC ../../../module_sample/*.c)
+file(GLOB_RECURSE CAMERA ../../../module_sample/camera/*.c*)
 
 include_directories(../../../module_sample)
 include_directories(../common)
 include_directories(application)
-
 include_directories(../../../../../psdk_lib/include)
 link_directories(../../../../../psdk_lib/lib/${TOOLCHAIN_NAME})
 link_libraries(${CMAKE_CURRENT_LIST_DIR}/../../../../../psdk_lib/lib/${TOOLCHAIN_NAME}/lib${PACKAGE_NAME}.a)
@@ -55,9 +56,23 @@ add_executable(${PROJECT_NAME}
         ${MODULE_APP_SRC}
         ${MODULE_SAMPLE_SRC}
         ${MODULE_COMMON_SRC}
-        ${MODULE_HAL_SRC})
+        ${MODULE_HAL_SRC}
+        ${CAMERA}
+        )
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../common/3rdparty)
+
+find_package(RKMODS REQUIRED)
+if(RKMODS_FOUND)
+    message(STATUS "Found  necessary modules installed in the system")
+    message(STATUS " - Includes: ${RKMODS_INCLUDES}")
+    message(STATUS " - Libraries: ${RKMODS_LIBRARIES}")
+    target_include_directories(${PROJECT_NAME} PUBLIC ${RKMODS_INCLUDES})
+    target_link_libraries(${PROJECT_NAME} ${RKMODS_LIBRARIES})
+else()
+    message(STATUS "Cannot Find RKMODS")
+endif()
+
 find_package(OPUS REQUIRED)
 if (OPUS_FOUND)
     message(STATUS "Found OPUS installed in the system")
@@ -65,7 +80,8 @@ if (OPUS_FOUND)
     message(STATUS " - Libraries: ${OPUS_LIBRARY}")
 
     add_definitions(-DOPUS_INSTALLED)
-    target_link_libraries(${PROJECT_NAME} /usr/local/lib/libopus.a)
+    include_directories(${OPUS_INCLUDE_DIR})
+    target_link_libraries(${PROJECT_NAME} opus)
 else ()
     message(STATUS "Cannot Find OPUS")
 endif (OPUS_FOUND)
@@ -77,12 +93,13 @@ if (LIBUSB_FOUND)
     message(STATUS " - Libraries: ${LIBUSB_LIBRARY}")
 
     add_definitions(-DLIBUSB_INSTALLED)
+    include_directories(${LIBUSB_INCLUDE_DIR})
     target_link_libraries(${PROJECT_NAME} usb-1.0)
 else ()
     message(STATUS "Cannot Find LIBUSB")
 endif (LIBUSB_FOUND)
 
-target_link_libraries(${PROJECT_NAME} m)
+target_link_libraries(${PROJECT_NAME} m $<TARGET_OBJECTS:SBGC_API>)
 
 add_custom_command(TARGET ${PROJECT_NAME}
         PRE_LINK COMMAND cmake ..

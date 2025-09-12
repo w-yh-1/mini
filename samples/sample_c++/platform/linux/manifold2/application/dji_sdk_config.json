@@ -5,7 +5,7 @@
     "user_app_key": "your_app_key",
     "user_app_license": "your_app_license",
     "user_develop_account": "your_developer_account",
-    "user_baud_rate": "460800"
+    "user_baud_rate": "921600"
   },
   "dji_sdk_link_config": {
     "link_available": "use_only_uart/use_uart_and_usb_bulk_device/use_uart_and_network_device",

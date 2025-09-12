@@ -40,19 +40,19 @@ extern "C" {
 
 /*!< Attention: Select your hardware connection mode here.
 * */
-#define CONFIG_HARDWARE_CONNECTION         DJI_USE_ONLY_UART
+#define CONFIG_HARDWARE_CONNECTION         DJI_USE_UART_AND_USB_BULK_DEVICE
 
 /*!< Attention: Select the sample you want to run here.
 * */
-#define CONFIG_MODULE_SAMPLE_GIMBAL_EMU_ON
+// #define CONFIG_MODULE_SAMPLE_GIMBAL_EMU_ON
 
-#define CONFIG_MODULE_SAMPLE_WIDGET_ON
+// #define CONFIG_MODULE_SAMPLE_WIDGET_ON
 
-#define CONFIG_MODULE_SAMPLE_WIDGET_SPEAKER_ON
+// #define CONFIG_MODULE_SAMPLE_WIDGET_SPEAKER_ON
 
-#define CONFIG_MODULE_SAMPLE_POWER_MANAGEMENT_ON
+// #define CONFIG_MODULE_SAMPLE_POWER_MANAGEMENT_ON
 
-#define CONFIG_MODULE_SAMPLE_DATA_TRANSMISSION_ON
+// #define CONFIG_MODULE_SAMPLE_DATA_TRANSMISSION_ON
 
 /* Exported types ------------------------------------------------------------*/
 
