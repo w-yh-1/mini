@@ -52,7 +52,7 @@ T_DjiReturnCode HalI2c_Init(T_DjiHalI2cConfig i2cConfig, T_DjiI2cHandle *i2cHand
     T_I2cHandleStruct *i2CHandleStruct = NULL;
 
     //attention: suggest reset the i2c device before init it.
-    HalI2c_ResetDevice();
+    // HalI2c_ResetDevice();
 
     i2CHandleStruct = malloc(sizeof(T_I2cHandleStruct));
     if (i2CHandleStruct == NULL) {
@@ -64,6 +64,8 @@ T_DjiReturnCode HalI2c_Init(T_DjiHalI2cConfig i2cConfig, T_DjiI2cHandle *i2cHand
         printf("Open i2c device failed, fd: %d\r\n", i2CHandleStruct->i2cFd);
         return -1;
     }
+
+    printf("Open i2c device success, fd: %d\r\n", i2CHandleStruct->i2cFd);
 
     *i2cHandle = i2CHandleStruct;
 
@@ -99,8 +101,15 @@ T_DjiReturnCode HalI2c_WriteData(T_DjiI2cHandle i2cHandle, uint16_t devAddress, 
     ret = ioctl(i2CHandleStruct->i2cFd, I2C_RDWR, &data);
     if (ret < 0) {
         *realLen = 0;
+        printf("i2c write data error\r\n");
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
     }
+    //打印输出
+    printf("i2c write data:");
+    for (int i = 0; i < len; i++) {
+        printf(" %02x", buf[i]);
+    }
+    printf("\r\n");
 
     *realLen = ret;
 
@@ -126,8 +135,15 @@ T_DjiReturnCode HalI2c_ReadData(T_DjiI2cHandle i2cHandle, uint16_t devAddress, u
     ret = ioctl(i2CHandleStruct->i2cFd, I2C_RDWR, &data);
     if (ret < 0) {
         *realLen = 0;
+        printf("i2c read data error\r\n");
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
     }
+    //打印输出
+    printf("i2c read data:");
+    for (int i = 0; i < len; i++) {
+        printf(" %02x", buf[i]);
+    }
+    printf("\r\n");
 
     *realLen = ret;
 

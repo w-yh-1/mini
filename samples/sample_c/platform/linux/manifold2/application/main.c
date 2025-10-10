@@ -44,6 +44,7 @@
 #include "osal/osal.h"
 #include "osal/osal_fs.h"
 #include "osal/osal_socket.h"
+#include "../hal/hal_i2c.h"
 #include "../hal/hal_uart.h"
 #include "../hal/hal_network.h"
 #include "../hal/hal_usb_bulk.h"
@@ -105,7 +106,7 @@ int main(int argc, char **argv)
         .majorVersion = 1,
         .minorVersion = 0,
         .modifyVersion = 0,
-        .debugVersion = 0,
+        .debugVersion = 1,
     };
 
     USER_UTIL_UNUSED(argc);
@@ -174,7 +175,7 @@ int main(int argc, char **argv)
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
     }
 
-    returnCode = DjiCore_SetSerialNumber("202505081112");
+    returnCode = DjiCore_SetSerialNumber("ZH480MINI20250920");
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
     {
         USER_LOG_ERROR("set serial number error");
@@ -185,7 +186,7 @@ int main(int argc, char **argv)
 #ifdef CONFIG_MODULE_SAMPLE_POWER_MANAGEMENT_ON
     T_DjiTestApplyHighPowerHandler applyHighPowerHandler = {
         .pinInit = DjiTest_HighPowerApplyPinInit,
-        .pinWrite = DjiTest_WriteHighPowerApplyPin,
+        .pinWrite = DjiTest_WriteHighPowerApplyPin, 
     };
 
     returnCode = DjiTest_RegApplyHighPowerHandler(&applyHighPowerHandler);
@@ -450,6 +451,12 @@ static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void)
         .func = DjiUser_LocalWrite,
         .isSupportColor = true,
     };
+    T_DjiHalI2cHandler i2cHandler = {
+        .I2cInit = HalI2c_Init,
+        .I2cDeInit = HalI2c_DeInit,
+        .I2cWriteData = HalI2c_WriteData,
+        .I2cReadData = HalI2c_ReadData,
+    };
 
     T_DjiHalUartHandler uartHandler = {
         .UartInit = HalUart_Init,
@@ -507,6 +514,16 @@ static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void)
     {
         printf("register osal handler error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
+    }
+
+    returnCode = DjiPlatform_RegHalI2cHandler(&i2cHandler);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        printf("register hal i2c handler error");
+        return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
+    }
+    else
+    {
+        printf("register hal i2c handler success\r\n");
     }
 
     returnCode = DjiPlatform_RegHalUartHandler(&uartHandler);
@@ -878,14 +895,14 @@ static void OutPutFunc(void *data, size_t len, bool isEnd)
 {
     const uint8_t *sendPtr = (const uint8_t *)data;
     T_DjiReturnCode returnCode;
-    USER_LOG_INFO("start send video stream, len: %zu, isEnd: %d", len, isEnd);
+    // USER_LOG_INFO("start send video stream, len: %zu, isEnd: %d", len, isEnd);
     returnCode = DjiPayloadCamera_SendVideoStream(sendPtr, len);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
     {
         USER_LOG_ERROR("cam send video stream error");
         return;
     }
-    USER_LOG_INFO("send video stream ok");
+    // USER_LOG_INFO("send video stream ok");
 }
 
 static bool GetVideoStreamState()

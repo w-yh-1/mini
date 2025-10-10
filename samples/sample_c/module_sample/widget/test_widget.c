@@ -55,12 +55,14 @@ static const T_DjiWidgetHandlerListItem s_widgetHandlerList[] = {
     {1, DJI_WIDGET_TYPE_LIST, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {2, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {3, DJI_WIDGET_TYPE_SCALE, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {4, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {5, DJI_WIDGET_TYPE_SCALE, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {4, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {5, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {7, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {8, DJI_WIDGET_TYPE_LIST, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {7, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {8, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {9, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}
 };
+
 
 static const char *s_widgetTypeNameArray[] = {
     "Unknown",
@@ -103,11 +105,11 @@ T_DjiReturnCode DjiTest_WidgetStartService(void)
 
     if (s_isWidgetFileDirPathConfigured == true)
     {
-        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/en_big_screen", s_widgetFileDirPath);
+        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%s480_widget_file/en_big_screen", s_widgetFileDirPath);
     }
     else
     {
-        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/en_big_screen", curFileDirPath);
+        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%s480_widget_file/en_big_screen", curFileDirPath);
     }
     USER_LOG_INFO("widget ui config path: %s", tempPath);
 
@@ -132,11 +134,11 @@ T_DjiReturnCode DjiTest_WidgetStartService(void)
     // set ui config for Chinese language
     if (s_isWidgetFileDirPathConfigured == true)
     {
-        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/cn_big_screen", s_widgetFileDirPath);
+        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%s480_widget_file/cn_big_screen", s_widgetFileDirPath);
     }
     else
     {
-        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%swidget_file/cn_big_screen", curFileDirPath);
+        snprintf(tempPath, WIDGET_DIR_PATH_LEN_MAX, "%s480_widget_file/cn_big_screen", curFileDirPath);
     }
 
     USER_LOG_INFO("widget ui config path: %s", tempPath);
@@ -247,10 +249,49 @@ static void *DjiTest_WidgetTask(void *arg)
 static T_DjiReturnCode DjiTestWidget_SetWidgetValue(E_DjiWidgetType widgetType, uint32_t index, int32_t value,
                                                     void *userData)
 {
-    USER_UTIL_UNUSED(userData);
-
+USER_UTIL_UNUSED(userData);
     USER_LOG_INFO("Set widget value, widgetType = %s, widgetIndex = %d ,widgetValue = %d",
                   s_widgetTypeNameArray[widgetType], index, value);
+    switch (index)
+    {
+    case 0:
+        if (s_widgetValueList[0] && !value)
+        {
+            // next_cam_mode();
+        }
+        break;
+    case 1:
+        // set_uv_color(value);
+        break;
+    case 2:
+        // set_uv_denoise_mode(value);
+        break;
+    case 3:
+        if (value >= s_widgetValueList[3] + 10)
+            value = s_widgetValueList[3] + 10;
+        else if (value <= s_widgetValueList[3] - 10)
+            value = s_widgetValueList[3] - 10;
+        // set_uv_gain(value);
+        break;
+    case 4:
+        // set_uv_count_period(value);
+        break;
+    case 5:
+        // set_uv_hor_dist_correction(value)
+        break;
+    case 6:
+        // set_uv_hor_ang_correction(value)
+        break;
+    case 7:
+        // set_uv_ver_dist_correction(value)
+        break;
+    case 8:
+        // set_uv_ver_ang_correction(value)
+        break;
+    case 9:
+        // correction_factor_save();
+        break;
+    }
     s_widgetValueList[index] = value;
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
@@ -261,7 +302,29 @@ static T_DjiReturnCode DjiTestWidget_GetWidgetValue(E_DjiWidgetType widgetType, 
 {
     USER_UTIL_UNUSED(userData);
     USER_UTIL_UNUSED(widgetType);
-
+    switch (index)
+    {
+    // case 2:
+    //     s_widgetValueList[2] = get_uv_denoise_mode();
+    //     break;
+    // case 3:
+    //     s_widgetValueList[3] = get_uv_gain();
+    //     break;
+    // case 5:
+    //     s_widgetValueList[5] = get_uv_hor_dist_correction();
+    //     break;
+    // case 6:
+    //     s_widgetValueList[6] = get_uv_hor_ang_correction();
+    //     break;
+    // case 7:
+    //     s_widgetValueList[7] = get_uv_ver_dist_correction();
+    //     break;
+    // case 8:
+    //     s_widgetValueList[8] = get_uv_ver_ang_correction();
+    //     break;
+    default:
+        break;
+    }
     *value = s_widgetValueList[index];
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;

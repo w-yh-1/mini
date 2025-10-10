@@ -1,0 +1,203 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "main_interface": {
+    "floating_window": {
+      "is_enable": false
+    },
+    "speaker": {
+      "is_enable_tts": false,
+      "is_enable_voice": false
+    },
+    "widget_list": [
+      {
+        "widget_index": 0,
+        "widget_type": "button",
+        "widget_name": "模式切换按钮",
+        "icon_file_set": {
+          "icon_file_name_selected": "Mode_down.png",
+          "icon_file_name_unselected": "Mode_up.png"
+        },
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 0
+        }
+      },
+      {
+        "widget_index": 1,
+        "widget_type": "list",
+        "widget_name": "光子颜色列表",
+        "list_item": [
+          {
+            "item_name": "纯红",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "红色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "橙色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "黄色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "纯绿",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "绿色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "青色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "纯蓝",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "蓝色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "紫色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "白色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          },
+          {
+            "item_name": "黑色",
+            "icon_file_set": {
+              "icon_file_name_selected": "icon_button2.png",
+              "icon_file_name_unselected": "icon_button2.png"
+            }
+          }
+        ],
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 1
+        }
+      },
+      {
+        "widget_index": 2,
+        "widget_type": "switch",
+        "widget_name": "降噪开关",
+        "icon_file_set": {
+          "icon_file_name_selected": "denoise_on.png",
+          "icon_file_name_unselected": "denoise_off.png"
+        },
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 2
+        }
+      },
+      {
+        "widget_index": 3,
+        "widget_type": "scale",
+        "widget_name": "增益范围条",
+        "icon_file_set": {
+          "icon_file_name_selected": "icon_scale.png",
+          "icon_file_name_unselected": "icon_scale.png"
+        },
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 3,
+          "button_value_step_length": 5
+        }
+      },
+      {
+        "widget_index": 4,
+        "widget_type": "switch",
+        "widget_name": "计数单位切换",
+        "icon_file_set": {
+          "icon_file_name_selected": "PerS.png",
+          "icon_file_name_unselected": "PerM.png"
+        },
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 4
+        }
+      }
+    ]
+  },
+  "config_interface": {
+    "text_input_box": {
+      "widget_name": "文本输入框",
+      "placeholder_text": "请输入消息",
+      "is_enable": false
+    },
+    "widget_list": [
+      {
+        "widget_index": 5,
+        "widget_type": "int_input_box",
+        "widget_name": "UV-VL水平相对校正",
+        "int_input_box_hint": "单位:0.1"
+      },
+      {
+        "widget_index": 6,
+        "widget_type": "int_input_box",
+        "widget_name": "UV-VL水平绝对校正",
+        "int_input_box_hint": "单位:0.1"
+      },
+      {
+        "widget_index": 7,
+        "widget_type": "int_input_box",
+        "widget_name": "UV-VL垂直相对校正",
+        "int_input_box_hint": "单位:0.1"
+      },
+      {
+        "widget_index": 8,
+        "widget_type": "int_input_box",
+        "widget_name": "UV-VL垂直绝对校正",
+        "int_input_box_hint": "单位:0.1"
+      },
+      {
+        "widget_index": 9,
+        "widget_type": "button",
+        "widget_name": "保存校正"
+      }
+    ]
+  }
+}

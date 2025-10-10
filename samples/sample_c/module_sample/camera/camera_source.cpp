@@ -453,7 +453,7 @@ CamSource *camera_source_init(const char *device, RK_U32 bufcnt, RK_U32 width, R
     ctx->fd = open(device, O_RDWR, 0);
     if (ctx->fd < 0)
     {
-        printf("Cannot open vl device\n");
+        printf("Cannot open %s\n",device);
         goto FAIL;
     }
     // Set device format
@@ -641,7 +641,7 @@ RK_S32 camera_source_get_frame(CamSource *ctx)
         buf.length = FMT_NUM_PLANES;
     }
     // 1.select
-    FD_ZERO(&rfds);
+    FD_ZERO(&rfds); 
     FD_SET(ctx->fd, &rfds);
     tv.tv_sec = 1; // 等待1秒
     tv.tv_usec = 0;

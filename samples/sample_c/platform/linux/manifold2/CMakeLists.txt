@@ -99,6 +99,39 @@ else ()
     message(STATUS "Cannot Find LIBUSB")
 endif (LIBUSB_FOUND)
 
+find_package(PNG REQUIRED)
+if (PNG_FOUND)
+    message(STATUS "Found PNG installed in the system")
+    message(STATUS " - Includes: ${PNG_INCLUDE_DIRS}")
+    message(STATUS " - Libraries: ${PNG_LIBRARIES}")
+
+    include_directories(${PNG_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} ${PNG_LIBRARIES})
+else ()
+    message(STATUS "Cannot Find PNG")
+endif (PNG_FOUND)
+
+# 增加jsoncpp支持
+FIND_LIBRARY(JSONCPP_LIBRARY jsoncpp
+    /usr/local/lib
+    /usr/lib
+)
+IF(NOT JSONCPP_LIBRARY)
+    message(FATAL_ERROR "libjsoncpp not found!")
+ENDIF()
+
+FIND_PATH(JSONCPP_HEAD_DIR jsoncpp
+    PATHS
+    /usr/local/include
+    /usr/include)
+IF(NOT JSONCPP_HEAD_DIR)
+    message(FATAL_ERROR "jsoncpp headers not found!")
+ENDIF()
+
+target_include_directories(${PROJECT_NAME} PUBLIC ${JSONCPP_HEAD_DIR})
+target_link_libraries(${PROJECT_NAME} ${JSONCPP_LIBRARY})
+
+# add simple bgc api
 target_link_libraries(${PROJECT_NAME} m $<TARGET_OBJECTS:SBGC_API>)
 
 add_custom_command(TARGET ${PROJECT_NAME}
