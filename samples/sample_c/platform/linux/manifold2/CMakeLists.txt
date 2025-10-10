@@ -132,7 +132,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${JSONCPP_HEAD_DIR})
 target_link_libraries(${PROJECT_NAME} ${JSONCPP_LIBRARY})
 
 # add simple bgc api
-target_link_libraries(${PROJECT_NAME} m $<TARGET_OBJECTS:SBGC_API>)
+target_link_libraries(${PROJECT_NAME} m dl $<TARGET_OBJECTS:SBGC_API>)
 
 add_custom_command(TARGET ${PROJECT_NAME}
         PRE_LINK COMMAND cmake ..

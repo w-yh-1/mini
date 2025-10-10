@@ -31,6 +31,7 @@
 #include "dji_platform.h"
 #include "utils/util_misc.h"
 #include "sbgc32.h"
+#include "widget_interaction_test/test_widget_interaction.h"
 
 /* Private constants ---------------------------------------------------------*/
 #define PAYLOAD_GIMBAL_EMU_TASK_STACK_SIZE (2048)
@@ -263,9 +264,116 @@ T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
         USER_LOG_DEBUG("gimbal relative rotate action time: %d.",
                        rotationProperty.relativeAngleRotation.actionTime);
 
-        if (s_rotatingFlag == true)
-        {
-            USER_LOG_WARN("gimbal is rotating.");
+            if (s_rotatingFlag == true) {
+                USER_LOG_WARN("gimbal is rotating.");
+                goto out1;
+            }
+
+            targetAttitudeDTemp.pitch =
+                rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch : (
+                    s_attitudeInformation.attitude.pitch + rotationValue.pitch);
+            targetAttitudeDTemp.roll =
+                rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll : (
+                    s_attitudeInformation.attitude.roll + rotationValue.roll);
+            targetAttitudeDTemp.yaw =
+                rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw : (
+                    s_attitudeInformation.attitude.yaw + rotationValue.yaw);
+
+            targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch;
+            targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
+            targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
+            DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
+            targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
+            targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
+            targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
+
+            s_targetAttitude = targetAttitudeDTemp;
+            s_rotatingFlag = true;
+            s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
+
+            djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
+                                                   rotationProperty.relativeAngleRotation.actionTime, &s_speed);
+            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
+                returnCode = djiStat;
+                goto out1;
+            }
+
+            break;
+        case DJI_GIMBAL_ROTATION_MODE_ABSOLUTE_ANGLE:
+            DjiTest_WidgetLogAppend("abs mode (%d  %d %d)", rotationValue.pitch, rotationValue.roll, rotationValue.yaw);
+            USER_LOG_INFO("gimbal absolute rotate angle: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
+                          rotationValue.roll, rotationValue.yaw);
+            USER_LOG_DEBUG("gimbal absolute rotate action time: %d.",
+                           rotationProperty.absoluteAngleRotation.actionTime);
+            if (rotationProperty.absoluteAngleRotation.jointAngleValid) {
+                USER_LOG_DEBUG("gimbal joint angles: pitch %d, roll %d, yaw %d.",
+                               rotationProperty.absoluteAngleRotation.jointAngle.pitch,
+                               rotationProperty.absoluteAngleRotation.jointAngle.roll,
+                               rotationProperty.absoluteAngleRotation.jointAngle.yaw);
+            }
+
+            if (s_rotatingFlag == true) {
+                USER_LOG_WARN("gimbal is rotating.");
+                goto out1;
+            }
+
+            targetAttitudeDTemp.pitch =
+                rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch
+                                                                        : rotationValue.pitch;
+            targetAttitudeDTemp.roll =
+                rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll
+                                                                       : rotationValue.roll;
+            targetAttitudeDTemp.yaw =
+                rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw
+                                                                      : rotationValue.yaw;
+
+            targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch;
+            targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
+            targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
+            DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
+            targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
+            targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
+            targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
+
+            s_targetAttitude = targetAttitudeDTemp;
+            s_rotatingFlag = true;
+            s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
+
+            djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
+                                                   rotationProperty.absoluteAngleRotation.actionTime, &s_speed);
+            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
+                returnCode = djiStat;
+                goto out1;
+            }
+
+            break;
+        case DJI_GIMBAL_ROTATION_MODE_SPEED:
+            DjiTest_WidgetLogAppend("speed mode (%d  %d %d)", rotationValue.pitch, rotationValue.roll, rotationValue.yaw);
+            USER_LOG_INFO("gimbal rotate speed: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
+                          rotationValue.roll, rotationValue.yaw);
+
+            if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE) {
+                USER_LOG_WARN("gimbal is rotating.");
+                goto out1;
+            }
+
+            memcpy(&speedTemp, &rotationValue, sizeof(T_DjiAttitude3d));
+            DjiTest_GimbalSpeedLegalization(&speedTemp);
+            s_speed = speedTemp;
+
+            if (rotationValue.pitch != 0 || rotationValue.roll != 0 || rotationValue.yaw != 0) {
+                s_rotatingFlag = true;
+                s_controlType = TEST_GIMBAL_CONTROL_TYPE_SPEED;
+            } else {
+                s_rotatingFlag = false;
+            }
+
+            break;
+        default:
+            USER_LOG_ERROR("gimbal rotation mode invalid: %d.", rotationMode);
+            returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT;
             goto out1;
         }
 

@@ -113,7 +113,8 @@ T_DjiReturnCode DjiTest_WidgetStartService(void)
     }
     USER_LOG_INFO("widget ui config path: %s", tempPath);
 
-    // set default ui config path
+    //set default ui config path
+    USER_LOG_INFO("widget file: %s", tempPath);
     djiStat = DjiWidget_RegDefaultUiConfigByDirPath(tempPath);
     if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
     {

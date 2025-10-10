@@ -141,3 +141,5 @@ if (OpenCV_FOUND)
     target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
 endif ()
 
+target_link_libraries(${PROJECT_NAME} dl)
+

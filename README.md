@@ -1,8 +1,8 @@
 # DJI Payload SDK (PSDK)
 
-![](https://img.shields.io/badge/version-V3.11.1-yellow.svg)
-![](https://img.shields.io/badge/platform-linux_|_rtos-pink.svg)
-![](https://img.shields.io/badge/license-MIT-red.svg)
+![](https://img.shields.io/badge/version-V3.13.1-purple.svg)
+![](https://img.shields.io/badge/platform-linux_|_rtos-red.svg)
+![](https://img.shields.io/badge/license-MIT-cyan.svg)
 
 ## What is the DJI Payload SDK?
 
@@ -23,13 +23,20 @@ to get the latest version information.
 
 ## Latest Release
 
-The latest release version of PSDK is 3.11.1. This version of Payload SDK mainly add some new features support and fixed some
+The latest release version of PSDK is 3.13.1. This version of Payload SDK mainly add some new features support and fixed some
 bugs. Please refer to the release notes for detailed changes list.
 
-* Fixed the issue where the Matrice 4D or Matrice 4TD E-Port Lite interface was not recognized on FlightHub 2.
-* Fixed the crash issue when using the DjiCore_Delnit interface.
-* Fixed the occasional crash issue when transmitting video streams through the USB bulk channel on Matrice 350 RTK.
+### Released Feature List
 
+* Supports Mavic 3TA  model
+
+### Bug Fixes and Performance Improvements
+* Fixed an issue where the `DjiCore_Init` API failed on the Matrice 300.
+* Fixed an issue where quaternion data subscription failed for the Matrice 350 RTK.
+* Fixed occasional failures in the `DjiCore_Deinit` API.
+* Fixed occasional crashes caused by custom HMS modules.
+* Changed the default to not support RC-less flight. and exposed the `DjiFlightController_SetRCLostActionEnableStatus` API to disable or enable actions when the RC is lost.
+Note If you need to use RC-less flight, you must call this interface to disable RC-lost actions after `DjiFlightController_Init`. See the interface header file documentation for details.  
 ## License
 
 Payload SDK codebase is MIT-licensed. Please refer to the LICENSE file for detailed information.

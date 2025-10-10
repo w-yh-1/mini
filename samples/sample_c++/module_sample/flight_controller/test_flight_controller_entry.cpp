@@ -63,6 +63,10 @@ start:
         << "| [8] Waypoint 3.0 sample - run airline mission by kmz file (not support on M300 RTK)                            |\n"
         << "| [9] Interest point sample - run interest point mission by settings (only support on M3E/M3T)                   |\n"
         << "| [a] EU-C6 FTS trigger sample - receive fts callback to trigger parachute function (only support on M3D/M3DT)   |\n"
+        << "| [b] Slow rotate blade sample, only support on M400                                                             |\n"
+        << "| [c] Select FTS pwm trigger position, support on M4/M4T/M4D/M4TD                                                |\n"
+        << "| [d] Select FTS pwm trigger position, support on M400                                                           |\n"
+        << "| [f] Flight controller sample - Set the RC lost action enable, execute the RC lost action when RC is lost       |\n"
         << std::endl;
 
     std::cin >> inputSelectSample;
@@ -99,6 +103,20 @@ start:
             break;
         case 'a':
             DjiTest_FlightControlRunSample(E_DJI_TEST_FLIGHT_CTRL_SAMPLE_SELECT_FTS_TRIGGER);
+            break;
+        case 'b':
+            DjiTest_FlightControlRunSample(E_DJI_TEST_FLIGHT_CTRL_SAMPLE_SELECT_SLOW_ROTATE_BLADE);
+            break;
+        case 'c':
+            DjiTest_FlightControlFtsPwmTriggerSample(DJI_MOUNT_POSITION_EXTENSION_PORT, "DJI_MOUNT_POSITION_EXTENSION_PORT");
+            // or DJI_MOUNT_POSITION_EXTENSION_LITE_PORT
+            DjiTest_FlightControlFtsPwmTriggerSample(DJI_MOUNT_POSITION_EXTENSION_LITE_PORT, "DJI_MOUNT_POSITION_EXTENSION_LITE_PORT");
+            break;
+        case 'd': // for m400
+            DjiTest_FlightControlFtsPwmTriggerSample(DJI_MOUNT_POSITION_EXTENSION_PORT_V2_NO4, "DJI_MOUNT_POSITION_EXTENSION_PORT_V2_NO4");
+            break;
+        case 'f':
+            DjiTest_FlightControlRunSample(E_DJI_TEST_FLIGHT_CTRL_SAMPLE_SELECT_RC_LOST_ACTION_STATUS_ENBALE);
             break;
         case 'q':
             break;

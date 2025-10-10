@@ -90,6 +90,7 @@ bool DjiUserConfigManager_IsEnable(void)
 /* Private functions definition-----------------------------------------------*/
 static T_DjiReturnCode DjiUserConfigManager_GetAppInfoInner(const char *path, T_DjiUserInfo *userInfo)
 {
+#ifdef SYSTEM_ARCH_LINUX
     T_DjiReturnCode returnCode;
     uint32_t fileSize = 0;
     uint32_t readRealSize = 0;
@@ -99,7 +100,6 @@ static T_DjiReturnCode DjiUserConfigManager_GetAppInfoInner(const char *path, T_
     cJSON *jsonItem = NULL;
     cJSON *jsonValue = NULL;
 
-#ifdef SYSTEM_ARCH_LINUX
     returnCode = UtilFile_GetFileSizeByPath(path, &fileSize);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("Get file size by path failed, stat = 0x%08llX", returnCode);
@@ -191,6 +191,7 @@ jsonDataFree:
 
 static T_DjiReturnCode DjiUserConfigManager_GetLinkConfigInner(const char *path, T_DjiUserLinkConfig *linkConfig)
 {
+#ifdef SYSTEM_ARCH_LINUX
     T_DjiReturnCode returnCode;
     uint32_t fileSize = 0;
     uint32_t readRealSize = 0;
@@ -201,8 +202,6 @@ static T_DjiReturnCode DjiUserConfigManager_GetLinkConfigInner(const char *path,
     cJSON *jsonValue = NULL;
     cJSON *jsonConfig = NULL;
     int32_t configValue;
-
-#ifdef SYSTEM_ARCH_LINUX
 
     returnCode = UtilFile_GetFileSizeByPath(path, &fileSize);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
@@ -240,6 +239,10 @@ static T_DjiReturnCode DjiUserConfigManager_GetLinkConfigInner(const char *path,
                 linkConfig->type = DJI_USER_LINK_CONFIG_USE_UART_AND_NETWORK_DEVICE;
             } else if (strcmp(jsonValue->valuestring, "use_uart_and_usb_bulk_device") == 0) {
                 linkConfig->type = DJI_USER_LINK_CONFIG_USE_UART_AND_USB_BULK_DEVICE;
+            } else if (strcmp(jsonValue->valuestring, "use_only_usb_bulk_device") == 0) {
+                linkConfig->type = DJI_USER_LINK_CONFIG_USE_ONLY_USB_BULK_DEVICE;
+            } else if (strcmp(jsonValue->valuestring, "use_only_network_device") == 0) {
+                linkConfig->type = DJI_USER_LINK_CONFIG_USE_ONLY_NETWORK_DEVICE;
             }
         }
 
@@ -326,6 +329,23 @@ static T_DjiReturnCode DjiUserConfigManager_GetLinkConfigInner(const char *path,
             jsonConfig = cJSON_GetObjectItem(jsonValue, "usb_bulk2_endpoint_out");
             printf("Config usb bulk2 endpoint out: %s\r\n", jsonConfig->valuestring);
             linkConfig->usbBulkConfig.usbBulk2EndpointOut = configValue;
+
+            jsonConfig = cJSON_GetObjectItem(jsonValue, "usb_bulk3_device_name");
+            printf("Config usb bulk2 device name: %s\r\n", jsonConfig->valuestring);
+            strcpy(linkConfig->usbBulkConfig.usbBulk3DeviceName, jsonConfig->valuestring);
+
+            jsonConfig = cJSON_GetObjectItem(jsonValue, "usb_bulk3_interface_num");
+            printf("Config usb bulk2 interface num: %s\r\n", jsonConfig->valuestring);
+            sscanf(jsonConfig->valuestring, "%X", &configValue);
+            linkConfig->usbBulkConfig.usbBulk3InterfaceNum = configValue;
+
+            jsonConfig = cJSON_GetObjectItem(jsonValue, "usb_bulk3_endpoint_in");
+            printf("Config usb bulk2 endpoint in: %s\r\n", jsonConfig->valuestring);
+            linkConfig->usbBulkConfig.usbBulk3EndpointIn = configValue;
+
+            jsonConfig = cJSON_GetObjectItem(jsonValue, "usb_bulk3_endpoint_out");
+            printf("Config usb bulk2 endpoint out: %s\r\n", jsonConfig->valuestring);
+            linkConfig->usbBulkConfig.usbBulk3EndpointOut = configValue;
         }
     }
 
