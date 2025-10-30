@@ -25,7 +25,7 @@ private:
     Encoder *mEncoder = NULL;
     MppFrameFormat mEncFmt = MPP_FMT_YUV420SP;
     int mEncodeWidth = 1920;
-    int mEncodeHeight = 1088;
+    int mEncodeHeight = 1080;
     RK_U32 mBufcnt = 4;
     DMA_Buffer mTempBuf;
     int horzDistCorrectionFactor = 0; // 水平距离矫正系数

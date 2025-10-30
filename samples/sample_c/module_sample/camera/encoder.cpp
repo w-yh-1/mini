@@ -955,8 +955,8 @@ MPP_RET Encoder::cfg_setup()
     if (!args.bps)
     {
         // args.bps = args.width * args.height / 8 * (args.fps_out_num / args.fps_out_den);
-        args.bps = 4800000;
-        // args.bps = 6400000; // 8M
+        // args.bps = 4800000;
+        args.bps = 6400000; // 8M
     }
     args.gop_len = 30;
 

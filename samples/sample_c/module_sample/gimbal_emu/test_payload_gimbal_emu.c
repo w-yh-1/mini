@@ -291,13 +291,18 @@ T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
             s_rotatingFlag = true;
             s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
 
-            djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
-                                                   rotationProperty.relativeAngleRotation.actionTime, &s_speed);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
-                returnCode = djiStat;
-                goto out1;
-            }
+            // djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
+            //                                        rotationProperty.relativeAngleRotation.actionTime, &s_speed);
+            // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            //     USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
+            //     returnCode = djiStat;
+            //     goto out1;
+            // }
+            // 改为直接调用SBGC角度控制
+            Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
+            Control.AxisC[PITCH].angle = sbgcAngleToDegree((float)s_targetAttitude.pitch / 10.0f); // unit: degree
+            Control.AxisC[PITCH].speed = sbgcSpeedToValue((float)s_speed.pitch / 10.0f);           // unit: degree/s
+            SBGC32_Control(&SBGC32_Device, &Control);
 
             break;
         case DJI_GIMBAL_ROTATION_MODE_ABSOLUTE_ANGLE:
@@ -340,13 +345,17 @@ T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
             s_rotatingFlag = true;
             s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
 
-            djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
-                                                   rotationProperty.absoluteAngleRotation.actionTime, &s_speed);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
-                returnCode = djiStat;
-                goto out1;
-            }
+            // djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
+            //                                        rotationProperty.absoluteAngleRotation.actionTime, &s_speed);
+            // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            //     USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
+            //     returnCode = djiStat;
+            //     goto out1;
+            // }
+            Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
+            Control.AxisC[PITCH].angle = sbgcAngleToDegree((float)s_targetAttitude.pitch / 10.0f); // unit: degree
+            Control.AxisC[PITCH].speed = sbgcSpeedToValue((float)s_speed.pitch / 10.0f);           // unit: degree/s
+            SBGC32_Control(&SBGC32_Device, &Control);
 
             break;
         case DJI_GIMBAL_ROTATION_MODE_SPEED:
@@ -369,6 +378,9 @@ T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
             } else {
                 s_rotatingFlag = false;
             }
+            Control.mode[PITCH] = CtrlMODE_SPEED|CtrlFLAG_MIX_FOLLOW;
+            Control.AxisC[PITCH].speed = sbgcAngleToDegree((float)s_speed.pitch / 10.0f); // unit: degree/s
+            SBGC32_Control(&SBGC32_Device, &Control);
 
             break;
         default:
@@ -376,130 +388,6 @@ T_DjiReturnCode DjiTest_GimbalRotate(E_DjiGimbalRotationMode rotationMode,
             returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT;
             goto out1;
         }
-
-        targetAttitudeDTemp.pitch =
-            rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch : (s_attitudeInformation.attitude.pitch + rotationValue.pitch);
-        targetAttitudeDTemp.roll =
-            rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll : (s_attitudeInformation.attitude.roll + rotationValue.roll);
-        targetAttitudeDTemp.yaw =
-            rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw : (s_attitudeInformation.attitude.yaw + rotationValue.yaw);
-
-        targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch;
-        targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
-        targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
-        DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
-        targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
-        targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
-        targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
-
-        s_targetAttitude = targetAttitudeDTemp;
-        s_rotatingFlag = true;
-        s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
-
-        // djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
-        //                                        rotationProperty.relativeAngleRotation.actionTime, &s_speed);
-        // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
-        // {
-        //     USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
-        //     returnCode = djiStat;
-        //     goto out1;
-        // }
-        // 改为直接调用SBGC角度控制
-        Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
-        Control.AxisC[PITCH].angle = sbgcAngleToDegree((float)s_targetAttitude.pitch / 10.0f); // unit: degree
-        Control.AxisC[PITCH].speed = sbgcSpeedToValue((float)s_speed.pitch / 10.0f);           // unit: degree/s
-        SBGC32_Control(&SBGC32_Device, &Control);
-        break;
-
-    case DJI_GIMBAL_ROTATION_MODE_ABSOLUTE_ANGLE:
-        USER_LOG_INFO("gimbal absolute rotate angle: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
-                      rotationValue.roll, rotationValue.yaw);
-        USER_LOG_DEBUG("gimbal absolute rotate action time: %d.",
-                       rotationProperty.absoluteAngleRotation.actionTime);
-        if (rotationProperty.absoluteAngleRotation.jointAngleValid)
-        {
-            USER_LOG_DEBUG("gimbal joint angles: pitch %d, roll %d, yaw %d.",
-                           rotationProperty.absoluteAngleRotation.jointAngle.pitch,
-                           rotationProperty.absoluteAngleRotation.jointAngle.roll,
-                           rotationProperty.absoluteAngleRotation.jointAngle.yaw);
-        }                       
-
-        if (s_rotatingFlag == true)  
-        {
-            USER_LOG_WARN("gimbal is rotating.");
-            goto out1;
-        }
-
-        targetAttitudeDTemp.pitch =
-            rotationProperty.rotationValueInvalidFlag.pitch == true ? s_attitudeInformation.attitude.pitch
-                                                                    : rotationValue.pitch;
-        targetAttitudeDTemp.roll =
-            rotationProperty.rotationValueInvalidFlag.roll == true ? s_attitudeInformation.attitude.roll
-                                                                   : rotationValue.roll;
-        targetAttitudeDTemp.yaw =
-            rotationProperty.rotationValueInvalidFlag.yaw == true ? s_attitudeInformation.attitude.yaw
-                                                                  : rotationValue.yaw;
-
-        targetAttitudeFTemp.pitch = targetAttitudeDTemp.pitch ;
-        targetAttitudeFTemp.roll = targetAttitudeDTemp.roll;
-        targetAttitudeFTemp.yaw = targetAttitudeDTemp.yaw;
-        DjiTest_GimbalAngleLegalization(&targetAttitudeFTemp, s_aircraftAttitude, NULL);
-        targetAttitudeDTemp.pitch = targetAttitudeFTemp.pitch;
-        targetAttitudeDTemp.roll = targetAttitudeFTemp.roll;
-        targetAttitudeDTemp.yaw = targetAttitudeFTemp.yaw;
-
-        s_targetAttitude = targetAttitudeDTemp;
-        s_rotatingFlag = true;
-        s_controlType = TEST_GIMBAL_CONTROL_TYPE_ANGLE;
-
-        // djiStat = DjiTest_GimbalCalculateSpeed(s_attitudeInformation.attitude, s_targetAttitude,
-        //                                        rotationProperty.absoluteAngleRotation.actionTime, &s_speed);
-        // if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
-        // {
-        //     USER_LOG_ERROR("calculate gimbal rotation speed error: 0x%08llX.", djiStat);
-        //     returnCode = djiStat;
-        //     goto out1;
-        // }
-        Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
-        Control.AxisC[PITCH].angle = sbgcAngleToDegree((float)s_targetAttitude.pitch / 10.0f); // unit: degree
-        Control.AxisC[PITCH].speed = sbgcSpeedToValue((float)s_speed.pitch / 10.0f);           // unit: degree/s
-        SBGC32_Control(&SBGC32_Device, &Control);
-        break;
-    case DJI_GIMBAL_ROTATION_MODE_SPEED:
-        USER_LOG_INFO("gimbal rotate speed: pitch %d, roll %d, yaw %d.", rotationValue.pitch,
-                      rotationValue.roll, rotationValue.yaw);
-
-        if (s_rotatingFlag == true && s_controlType == TEST_GIMBAL_CONTROL_TYPE_ANGLE)
-        {
-            USER_LOG_WARN("gimbal is rotating.");
-            goto out1;
-        }
-
-        memcpy(&speedTemp, &rotationValue, sizeof(T_DjiAttitude3d));
-        DjiTest_GimbalSpeedLegalization(&speedTemp);
-        s_speed = speedTemp;
-
-        if (rotationValue.pitch != 0 || rotationValue.roll != 0 || rotationValue.yaw != 0)
-        {
-            s_rotatingFlag = true;
-            s_controlType = TEST_GIMBAL_CONTROL_TYPE_SPEED;
-        }
-        else
-        {
-            s_rotatingFlag = false;
-        }
-
-        Control.mode[PITCH] = CtrlMODE_SPEED|CtrlFLAG_MIX_FOLLOW;
-        Control.AxisC[PITCH].speed = sbgcAngleToDegree((float)s_speed.pitch / 10.0f); // unit: degree/s
-        SBGC32_Control(&SBGC32_Device, &Control);
-
-        break;
-    default:
-        USER_LOG_ERROR("gimbal rotation mode invalid: %d.", rotationMode);
-        returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT;
-        goto out1;
-    }
-
 out1:
     if (osalHandler->MutexUnlock(s_commonMutex) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
     {

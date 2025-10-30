@@ -161,7 +161,7 @@ int main(int argc, char **argv)
         }
     }
 
-    returnCode = DjiCore_SetAlias("480MINI");
+    returnCode = DjiCore_SetAlias("ZH480MINI");
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
     {
         USER_LOG_ERROR("set alias error");
@@ -186,7 +186,7 @@ int main(int argc, char **argv)
 #ifdef CONFIG_MODULE_SAMPLE_POWER_MANAGEMENT_ON
     T_DjiTestApplyHighPowerHandler applyHighPowerHandler = {
         .pinInit = DjiTest_HighPowerApplyPinInit,
-        .pinWrite = DjiTest_WriteHighPowerApplyPin, 
+        .pinWrite = DjiTest_WriteHighPowerApplyPin,
     };
 
     returnCode = DjiTest_RegApplyHighPowerHandler(&applyHighPowerHandler);
@@ -458,7 +458,7 @@ static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void)
         .I2cReadData = HalI2c_ReadData,
     };
 
-    T_DjiHalUartHandler uartHandler = {
+    T_DjiHalUartHandler uartHandler = { 
         .UartInit = HalUart_Init,
         .UartDeInit = HalUart_DeInit,
         .UartWriteData = HalUart_WriteData,
@@ -514,16 +514,6 @@ static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void)
     {
         printf("register osal handler error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
-    }
-
-    returnCode = DjiPlatform_RegHalI2cHandler(&i2cHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        printf("register hal i2c handler error");
-        return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
-    }
-    else
-    {
-        printf("register hal i2c handler success\r\n");
     }
 
     returnCode = DjiPlatform_RegHalUartHandler(&uartHandler);
@@ -585,6 +575,17 @@ static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void)
     {
         printf("register osal filesystem handler error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
+    }
+
+    returnCode = DjiPlatform_RegHalI2cHandler(&i2cHandler);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
+        printf("register hal i2c handler error");
+        return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
+    }
+    else
+    {
+        printf("register hal i2c handler success\r\n");
     }
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;

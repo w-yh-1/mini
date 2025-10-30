@@ -32,10 +32,10 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif 
 
 /* Exported constants --------------------------------------------------------*/
-#define LINUX_I2C_DEV1        "/dev/i2c-2"
+#define LINUX_I2C_DEV1        "/dev/i2c-7"
 
 /* Exported types ------------------------------------------------------------*/
 
