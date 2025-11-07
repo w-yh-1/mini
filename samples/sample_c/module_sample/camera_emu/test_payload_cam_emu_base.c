@@ -950,7 +950,7 @@ static T_DjiReturnCode DjiTest_CameraRotationGimbal(T_TestCameraGimbalRotationAr
 #pragma GCC diagnostic ignored "-Wmissing-noreturn"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 #endif
-
+extern int take_snapshot_auto();
 static void *UserCamera_Task(void *arg)
 {
     static uint32_t photoCnt = 0;
@@ -986,6 +986,7 @@ static void *UserCamera_Task(void *arg)
 
             //store the photo after shooting finished
             if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_SINGLE) {
+                take_snapshot_auto();
                 s_cameraSDCardState.remainSpaceInMB =
                     s_cameraSDCardState.remainSpaceInMB - SDCARD_PER_PHOTO_SPACE_IN_MB;
                 s_cameraState.isStoring = false;

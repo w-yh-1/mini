@@ -1,9 +1,22 @@
 #include "camera_process.h"
 #include "select_delay.h"
+#include "UV_API.h"
+#include "UV_API_async.h"
 #include <png.h>
 #include "json.h"
 #include <string>
 #include <fstream>
+#include <deque>
+#include <vector>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+#include <string.h>
+#include <sys/eventfd.h>
+#include <poll.h>
+
 
 static camera_process *processor = NULL;
 static bool cam_stream_on = false;
@@ -16,6 +29,75 @@ static IM_STATUS rga_imcolorkey(const rga_buffer_t src,
                                 int mode,
                                 int sync = 1,
                                 int *release_fence_fd = NULL);
+
+static uv_async_t *uv_ctx = NULL;
+static uint32_t uv_photons = 0;
+static void uv_cb_func(int et, int status, uint32_t value, void* user);
+static bool init_UV_async(uv_async_t **uv_ctx);
+static bool deinit_UV_async(uv_async_t *uv_ctx);
+static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height);
+static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes);
+static bool ensure_dir_exists(const char* dir);
+static std::string build_unique_png_path(const char* dir);
+static inline void eventfd_notify(int efd) {
+    if (efd < 0) return;
+    uint64_t one = 1;
+    ssize_t n = write(efd, &one, sizeof(one));
+    (void)n;
+}
+static inline void eventfd_drain(int efd) {
+    if (efd < 0) return;
+    uint64_t val;
+    ssize_t n = read(efd, &val, sizeof(val));
+    (void)n;
+}
+// --- 快照后台线程（静态成员） ---
+void* camera_process::snapshot_worker(void* arg)
+{
+    camera_process* self = reinterpret_cast<camera_process*>(arg);
+    self->mSnapThreadRunning.store(true, std::memory_order_release);
+    while (self->mSnapThreadRunning.load(std::memory_order_acquire)) {
+        // 阻塞等待事件或定时检查退出
+        struct pollfd pfd{self->mSnapEventFd, POLLIN, 0};
+        int pr = poll(&pfd, 1, 500); // 500ms 超时，便于响应退出
+        if (pr > 0 && (pfd.revents & POLLIN)) {
+            // 清空事件计数
+            eventfd_drain(self->mSnapEventFd);
+        }
+        // 消费所有 Ready 缓冲
+        for (int i = 0; i < 2; ++i) {
+            uint8_t st = self->mSnapState[i].load(std::memory_order_acquire);
+            if (st == 2 /*Ready*/) {
+                uint8_t expected = 2;
+                if (!self->mSnapState[i].compare_exchange_strong(expected, (uint8_t)3, std::memory_order_acq_rel)) {
+                    continue;
+                }
+                DMA_Buffer& buf = self->mSnapBuf[i];
+                const char* path = self->mSnapPath[i];
+                // 确保 CPU 可见
+                dma_sync_device_to_cpu(buf.dma_fd);
+
+                const int width = (int)buf.width;
+                const int height = (int)self->mEncodeHeight; // 仅保存有效高度
+                const int row_bytes = width * 3;
+                uint8_t* base = (uint8_t*)buf.ptr;
+                int rc = 0;
+                if ((int)buf.pitch == row_bytes) {
+                    rc = save_image_as_png(path, base, width, height);
+                } else {
+                    rc = save_image_as_png_stride(path, base, width, height, (int)buf.pitch);
+                }
+                if (rc != 0) {
+                    USER_LOG_ERROR("save_image_as_png failed(%d): %s\n", rc, path);
+                }
+                // 释放缓冲
+                self->mSnapState[i].store((uint8_t)0, std::memory_order_release);
+            }
+        }
+    }
+    return NULL;
+}
+
 void *camera_process::camera_task(void *arg)
 {
     camera_process *processor = (camera_process *)arg;
@@ -71,8 +153,43 @@ void *camera_process::camera_task(void *arg)
             }
             rga_improcess(processor->mTempBuf.rga_buf, *enc_buf);
             processor->mEncoder->enque_input_buf();
+
+            // --- 拍照：仅在有请求时触发一次 RGA 拷贝/转换到 RGB888 的快照缓冲（无锁 SPSC 双缓冲） ---
+            if (processor->mPendingSnap.load(std::memory_order_acquire)) {
+                // 查找 Free 槽并占用为 Filling
+                int idx = -1;
+                for (int i = 0; i < 2; ++i) {
+                    uint8_t st = processor->mSnapState[i].load(std::memory_order_acquire);
+                    if (st == 0 /*Free*/) {
+                        uint8_t expected = 0;
+                        if (processor->mSnapState[i].compare_exchange_strong(expected, (uint8_t)1, std::memory_order_acq_rel)) { idx = i; break; }
+                    }
+                }
+                if (idx >= 0) {
+                    // 拷贝路径并清除挂起标志
+                    char local_path[512];
+                    // 从挂起槽读取路径（发布-获取保证可见）
+                    strncpy(local_path, processor->mPendingPathBuf, sizeof(local_path) - 1);
+                    local_path[sizeof(local_path) - 1] = '\0';
+                    processor->mPendingSnap.store(false, std::memory_order_release);
+
+                    // RGA 硬件把 mTempBuf -> dst（RGB888），仅拍照时执行
+                    DMA_Buffer& dst = processor->mSnapBuf[idx];
+                    rga_improcess(processor->mTempBuf.rga_buf, dst.rga_buf);
+
+                    // 将路径写入对应槽
+                    strncpy(processor->mSnapPath[idx], local_path, sizeof(processor->mSnapPath[idx]) - 1);
+                    processor->mSnapPath[idx][sizeof(processor->mSnapPath[idx]) - 1] = '\0';
+
+                    // 发布 Ready 并唤醒保存线程
+                    processor->mSnapState[idx].store((uint8_t)2, std::memory_order_release);
+                    eventfd_notify(processor->mSnapEventFd);
+                }
+            }
+            
             // enc_buf解锁
         }
+        processor->mEncoder->modify_osd_count_data(&processor->mEncoder->osd_data, uv_photons, false);
         processor->update_uv_rect(0);
 
         /*另一实现方法*/
@@ -230,7 +347,14 @@ bool camera_process::init(pOutput_func output_func)
         return false;
     }
 
-    ret = get_dma_buf(&mTempBuf, mEncodeWidth, mEncodeHeight, mBufFmt);
+    ret = init_UV_async(&uv_ctx);
+    if (!ret)
+    {
+        USER_LOG_ERROR("init_UV_async failed\n");
+        return false;
+    }
+
+    ret = get_dma_buf(&mTempBuf, mEncodeWidth, mEncodeHeight+8, mBufFmt);
     if (ret < 0)
     {
         USER_LOG_ERROR("get_dma_buf failed\n");
@@ -244,6 +368,28 @@ bool camera_process::init(pOutput_func output_func)
         return false;
     }
     pthread_detach(mCamThread);
+
+    // --- 初始化快照双缓冲（RGB888，用于 PNG）与后台线程（无锁方案A） ---
+    // 使用 RGB888 以便 save_image_as_png 按行 width*3 访问
+    if (get_dma_buf(&mSnapBuf[0], mEncodeWidth, mEncodeHeight, RK_FORMAT_RGB_888) != 0 ||
+        get_dma_buf(&mSnapBuf[1], mEncodeWidth, mEncodeHeight, RK_FORMAT_RGB_888) != 0) {
+        USER_LOG_ERROR("get_dma_buf snapshot buffers failed\n");
+        return false;
+    }
+    mSnapState[0].store(0, std::memory_order_relaxed);
+    mSnapState[1].store(0, std::memory_order_relaxed);
+    mPendingSnap.store(false, std::memory_order_relaxed);
+    mSnapEventFd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (mSnapEventFd < 0) {
+        USER_LOG_ERROR("eventfd create failed\n");
+        return false;
+    }
+    int rc = pthread_create(&mSnapThread, NULL, &camera_process::snapshot_worker, this);
+    if (rc != 0) {
+        USER_LOG_ERROR("pthread_create snapshot worker failed\n");
+        return false;
+    }
+    pthread_detach(mSnapThread);
     return true;
 }
 
@@ -374,6 +520,55 @@ IM_STATUS rga_imcolorkey(const rga_buffer_t src, rga_buffer_t dst, im_rect srect
 
     return ret;
 }
+static void uv_cb_func(int et, int status, uint32_t value, void* user) {
+    if (status != UV_OK) {
+        USER_LOG_INFO("evt %d error %d\n", et, status);
+        return;
+    }
+    if (et == 3) { // PHOTON_COUNT
+        uv_photons = value;
+        // USER_LOG_INFO("photons=%u\n", value);
+    } else if (et == 2) { // GAIN
+        // USER_LOG_INFO("gain=%u\n", (unsigned)value);
+    } else if (et == 1) { // ACK
+        // USER_LOG_INFO("ack value=%u\n", (unsigned)value);
+    }
+}
+bool init_UV_async(uv_async_t **uv_ctx)
+{
+    int rc = uv_async_create("/dev/ttyS8", uv_ctx, uv_cb_func, NULL);
+    if (rc != UV_OK)
+    {  
+        USER_LOG_ERROR("uv_async_create failed: %d\n", rc);
+        return false;
+    }
+
+    rc = uv_async_start(*uv_ctx);
+    if (rc != UV_OK)
+    {
+        USER_LOG_ERROR("uv_async_start failed: %d\n", rc);
+        uv_async_destroy(*uv_ctx);
+        *uv_ctx = NULL;
+        return false;
+    }
+    return true;
+}
+
+static bool deinit_UV_async(uv_async_t *uv_ctx)
+{
+    if (uv_ctx == NULL)
+        return false;
+
+    int rc = uv_async_stop(uv_ctx);
+    if (rc != UV_OK)
+    {
+        USER_LOG_ERROR("uv_async_stop failed: %d\n", rc);
+        return false;
+    }
+    uv_async_destroy(uv_ctx);
+    
+    return true;
+}
 
 bool CameraMediaStartService(void *func_ptr)
 {
@@ -412,7 +607,7 @@ int resume_cam_stream()
     return 0;
 }
 
-int save_rgb_image_as_png(const char *filename, const uint8_t *image_data, int width, int height)
+static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height)
 {
     FILE *fp = fopen(filename, "wb");
     if (!fp)
@@ -448,11 +643,11 @@ int save_rgb_image_as_png(const char *filename, const uint8_t *image_data, int w
 
     png_write_info(png_ptr, info_ptr);
 
-    // 行指针数组
+    // 行指针数组（紧凑 RGB，stride = width*3）
     png_bytep row_pointers[height];
     for (int y = 0; y < height; ++y)
     {
-        row_pointers[y] = (png_bytep)(image_data + y * width * 3);
+        row_pointers[y] = (png_bytep)(image_data + (size_t)y * width * 3);
     }
 
     png_write_image(png_ptr, row_pointers);
@@ -461,4 +656,151 @@ int save_rgb_image_as_png(const char *filename, const uint8_t *image_data, int w
     png_destroy_write_struct(&png_ptr, &info_ptr);
     fclose(fp);
     return 0;
+}
+
+// 支持任意 stride 的 PNG 写入，避免额外 memcpy
+static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes)
+{
+    FILE *fp = fopen(filename, "wb");
+    if (!fp)
+        return -1;
+
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr)
+    {
+        fclose(fp);
+        return -2;
+    }
+
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr)
+    {
+        png_destroy_write_struct(&png_ptr, NULL);
+        fclose(fp);
+        return -3;
+    }
+
+    if (setjmp(png_jmpbuf(png_ptr)))
+    {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        fclose(fp);
+        return -4;
+    }
+
+    png_init_io(png_ptr, fp);
+
+    png_set_IHDR(png_ptr, info_ptr, width, height,
+                 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+
+    png_write_info(png_ptr, info_ptr);
+
+    // 行指针数组（带 stride）
+    png_bytep row_pointers[height];
+    for (int y = 0; y < height; ++y)
+    {
+        row_pointers[y] = (png_bytep)(image_data + (size_t)y * stride_bytes);
+    }
+
+    png_write_image(png_ptr, row_pointers);
+    png_write_end(png_ptr, NULL);
+
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(fp);
+    return 0;
+}
+
+int set_uv_color(uint value)
+{
+    int rc = uv_async_set_photons_color(uv_ctx, (uint8_t)value);
+    if (rc != UV_OK)
+    {
+        USER_LOG_ERROR("uv_async_set_photons_color failed: %d\n", rc);
+        return -1; 
+    }
+    return 0;
+}
+
+int set_uv_gain(uint value)
+{
+    int rc = uv_async_set_high_voltage_gain(uv_ctx, (uint16_t)value);
+    if (rc != UV_OK)
+    {
+        USER_LOG_ERROR("uv_async_set_uv_gain failed: %d\n", rc);
+        return -1;  
+    }
+    return 0;
+}
+
+// C 包装：触发拍照
+int take_snapshot(const char* path)
+{
+    if (!processor) return -1;
+    return processor->request_snapshot(path);
+}
+
+int take_snapshot_auto()
+{
+    if (!processor) return -1;
+    return processor->request_snapshot_auto();
+}
+
+// 成员方法：请求一次拍照
+int camera_process::request_snapshot(const char* path)
+{
+    if (!path || !*path) return -1;
+    // 若已有待抓取请求，则返回忙
+    if (mPendingSnap.load(std::memory_order_acquire)) return -1;
+    // 检查是否存在 Free 槽
+    bool has_free = false;
+    for (int i = 0; i < 2; ++i) {
+        if (mSnapState[i].load(std::memory_order_acquire) == 0) { has_free = true; break; }
+    }
+    if (!has_free) return -1; // busy
+    // 写入路径并发布请求
+    strncpy(mPendingPathBuf, path, sizeof(mPendingPathBuf) - 1);
+    mPendingPathBuf[sizeof(mPendingPathBuf) - 1] = '\0';
+    mPendingSnap.store(true, std::memory_order_release);
+    return 0;
+}
+
+int camera_process::request_snapshot_auto()
+{
+    // 确保保存目录存在
+    if (!ensure_dir_exists(SNAPSHOT_DIR)) {
+        USER_LOG_ERROR("snapshot dir not available: %s\n", SNAPSHOT_DIR);
+        return -1;
+    }
+    std::string path = build_unique_png_path(SNAPSHOT_DIR);
+    return request_snapshot(path.c_str());
+}
+
+static bool ensure_dir_exists(const char* dir)
+{
+    struct stat st;
+    if (stat(dir, &st) == 0) {
+        return S_ISDIR(st.st_mode);
+    }
+    if (mkdir(dir, 0775) == 0) {
+        return true;
+    }
+    if (errno == EEXIST) return true;
+    return false;
+}
+
+static std::string build_unique_png_path(const char* dir)
+{
+    time_t t = time(NULL);
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    char ts[32];
+    strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tmv);
+    std::string base = std::string(dir) + ts;
+    std::string path = base + ".png";
+    int idx = 1;
+    while (access(path.c_str(), F_OK) == 0 && idx < 1000) {
+        path = base + "_" + std::to_string(idx) + ".png";
+        ++idx;
+    }
+    return path;
 }

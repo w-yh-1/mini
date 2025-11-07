@@ -77,7 +77,7 @@ T_DjiReturnCode HalI2c_DeInit(T_DjiI2cHandle i2cHandle)
 {
     T_I2cHandleStruct *i2CHandleStruct = (T_I2cHandleStruct *) i2cHandle;
 
-    close(i2CHandleStruct->i2cFd);
+    close(i2CHandleStruct->i2cFd);  
     free(i2CHandleStruct);
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;

@@ -51,16 +51,13 @@ static bool s_isWidgetFileDirPathConfigured = false;
 static char s_widgetFileDirPath[DJI_FILE_PATH_SIZE_MAX] = {0};
 
 static const T_DjiWidgetHandlerListItem s_widgetHandlerList[] = {
-    {0, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {1, DJI_WIDGET_TYPE_LIST, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {2, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {3, DJI_WIDGET_TYPE_SCALE, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {4, DJI_WIDGET_TYPE_SWITCH, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {0, DJI_WIDGET_TYPE_LIST, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {1, DJI_WIDGET_TYPE_SCALE, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {2, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {3, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {4, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {5, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {7, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {8, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {9, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}
+    {6, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}
 };
 
 
@@ -247,6 +244,8 @@ static void *DjiTest_WidgetTask(void *arg)
 #pragma GCC diagnostic pop
 #endif
 
+extern int set_uv_color(uint value);
+extern int set_uv_gain(uint value);
 static T_DjiReturnCode DjiTestWidget_SetWidgetValue(E_DjiWidgetType widgetType, uint32_t index, int32_t value,
                                                     void *userData)
 {
@@ -256,40 +255,32 @@ USER_UTIL_UNUSED(userData);
     switch (index)
     {
     case 0:
-        if (s_widgetValueList[0] && !value)
+        if(value!=s_widgetValueList[index])
         {
-            // next_cam_mode();
+            USER_LOG_INFO("set_uv_color=%u\n", value);
+            set_uv_color(value+1);
         }
         break;
     case 1:
-        // set_uv_color(value);
+        if(value!=s_widgetValueList[index])
+        {
+            USER_LOG_INFO("set_uv_gain=%u\n", value);
+            set_uv_gain(value);
+        }
         break;
     case 2:
-        // set_uv_denoise_mode(value);
-        break;
-    case 3:
-        if (value >= s_widgetValueList[3] + 10)
-            value = s_widgetValueList[3] + 10;
-        else if (value <= s_widgetValueList[3] - 10)
-            value = s_widgetValueList[3] - 10;
-        // set_uv_gain(value);
-        break;
-    case 4:
-        // set_uv_count_period(value);
-        break;
-    case 5:
         // set_uv_hor_dist_correction(value)
         break;
-    case 6:
+    case 3:
         // set_uv_hor_ang_correction(value)
         break;
-    case 7:
+    case 4:
         // set_uv_ver_dist_correction(value)
         break;
-    case 8:
+    case 5:
         // set_uv_ver_ang_correction(value)
         break;
-    case 9:
+    case 6:
         // correction_factor_save();
         break;
     }
@@ -305,22 +296,19 @@ static T_DjiReturnCode DjiTestWidget_GetWidgetValue(E_DjiWidgetType widgetType, 
     USER_UTIL_UNUSED(widgetType);
     switch (index)
     {
-    // case 2:
-    //     s_widgetValueList[2] = get_uv_denoise_mode();
-    //     break;
-    // case 3:
+    // case 0:
     //     s_widgetValueList[3] = get_uv_gain();
     //     break;
-    // case 5:
+    // case 1:
     //     s_widgetValueList[5] = get_uv_hor_dist_correction();
     //     break;
-    // case 6:
+    // case 2:
     //     s_widgetValueList[6] = get_uv_hor_ang_correction();
     //     break;
-    // case 7:
+    // case 3:
     //     s_widgetValueList[7] = get_uv_ver_dist_correction();
     //     break;
-    // case 8:
+    // case 4:
     //     s_widgetValueList[8] = get_uv_ver_ang_correction();
     //     break;
     default:

@@ -662,11 +662,13 @@ RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt)
 
     return stride;
 }
+
+
 MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
 {
     MppEncOSDRegion *region = osd_data->region;
     MppBuffer buf = osd_data->buf;
-    int DW_per_line = 10;
+    int DW_per_line = 8;
     RK_U32 mb_w = DW_per_line * 2; // 每行8个字，每字占2mb（32byte）
     RK_U32 mb_h = 2 * 6;           // 每个字高32p 模式，光子数，距离，增益，缺陷,共5行
     RK_U32 buf_size = 0;
@@ -675,87 +677,38 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
 
     if (buf)
         buf_size = mpp_buffer_get_size(buf);
-    // 时间
-    region[0].inverse = 1;
-    region[0].start_mb_x = 100;
-    region[0].start_mb_y = 0;
+    // 公司名称，模式，光子数，距离，增益，缺陷
+    region[0].inverse = 0;
+    region[0].start_mb_x = 0;
+    region[0].start_mb_y = 21;
     region[0].num_mb_x = mb_w;
     region[0].num_mb_y = mb_h;
     region[0].buf_offset = 0;
     region[0].enable = 1;
-
     /* create buffer and write osd index data */
     if (buf_size < mb_w * mb_h * 256)
     {
-        buf_size = mb_w * mb_h * 256; // 64*32*2最[高/低]温
+        buf_size = mb_w * mb_h * 256 ; // 
         if (buf)
             mpp_buffer_put(buf);
 
         mpp_buffer_get(group, &buf, buf_size);
         if (NULL == buf)
-        {
             USER_LOG_ERROR("failed to create osd buffer size %d\n", buf_size);
-            return MPP_NOK;
-        }
+    }
+
+    if (buf)
+    {
+        char *ptr = (char *)mpp_buffer_get_ptr(buf);
+        if (isCN)
+            draw_cn_osd(ptr, DW_per_line);
+        else
+            draw_en_osd(ptr, DW_per_line);
     }
 
     osd_data->buf = buf;
     return MPP_OK;
 }
-
-// MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
-// {
-//     MppEncOSDRegion *region = osd_data->region;
-//     MppBuffer buf = osd_data->buf;
-//     int DW_per_line = 8;
-//     RK_U32 mb_w = DW_per_line * 2; // 每行8个字，每字占2mb（32byte）
-//     RK_U32 mb_h = 2 * 6;           // 每个字高32p 模式，光子数，距离，增益，缺陷,共5行
-//     RK_U32 buf_size = 0;
-//     osd_data->num_region = 2;
-//     int count = 0;
-
-//     if (buf)
-//         buf_size = mpp_buffer_get_size(buf);
-//     // 公司名称，模式，光子数，距离，增益，缺陷
-//     region[0].inverse = 0;
-//     region[0].start_mb_x = 0;
-//     region[0].start_mb_y = 21;
-//     region[0].num_mb_x = mb_w;
-//     region[0].num_mb_y = mb_h;
-//     region[0].buf_offset = 0;
-//     region[0].enable = 1;
-//     // 四分框
-//     region[1].inverse = 0;
-//     region[1].start_mb_x = 54; // 从x：1088位置开始
-//     region[1].start_mb_y = 0;  // 从y：0开始
-//     region[1].num_mb_x = 12;   // 每位数占1mb，并排显示2个6位数
-//     region[1].num_mb_y = 4;    // 每行占2个mb，共2行
-//     region[1].buf_offset = mb_w * mb_h * 256;
-//     region[1].enable = 1;
-//     /* create buffer and write osd index data */
-//     if (buf_size < mb_w * mb_h * 256)
-//     {
-//         buf_size = mb_w * mb_h * 256 + 64 * 32 * 2 + 4 * 5 * 256; // 64*32*2最[高/低]温
-//         if (buf)
-//             mpp_buffer_put(buf);
-
-//         mpp_buffer_get(group, &buf, buf_size);
-//         if (NULL == buf)
-//             USER_LOG_ERROR("failed to create osd buffer size %d\n", buf_size);
-//     }
-
-//     if (buf)
-//     {
-//         char *ptr = (char *)mpp_buffer_get_ptr(buf);
-//         if (isCN)
-//             draw_cn_osd(ptr, DW_per_line);
-//         else
-//             draw_en_osd(ptr, DW_per_line);
-//     }
-
-//     osd_data->buf = buf;
-//     return MPP_OK;
-// }
 
 void Encoder::switch_language(MppEncOSDData *osd_data, bool is_CN)
 {
@@ -1134,15 +1087,15 @@ MPP_RET Encoder::cfg_setup()
     }
 
     /* setup intra refresh 实现GDR刷新配置*/
-    args.refresh_en = true;
-    args.refresh_mode = MPP_ENC_RC_INTRA_REFRESH_ROW; // 逐行刷新
-    args.refresh_num = 6;
-    if (args.refresh_en)
-    {
-        mpp_enc_cfg_set_u32(cfg, "rc:refresh_en", args.refresh_en);
-        mpp_enc_cfg_set_u32(cfg, "rc:refresh_mode", args.refresh_mode);
-        mpp_enc_cfg_set_u32(cfg, "rc:refresh_num", args.refresh_num);
-    }
+    // args.refresh_en = true;
+    // args.refresh_mode = MPP_ENC_RC_INTRA_REFRESH_ROW; // 逐行刷新
+    // args.refresh_num = 6;
+    // if (args.refresh_en)
+    // {
+    //     mpp_enc_cfg_set_u32(cfg, "rc:refresh_en", args.refresh_en);
+    //     mpp_enc_cfg_set_u32(cfg, "rc:refresh_mode", args.refresh_mode);
+    //     mpp_enc_cfg_set_u32(cfg, "rc:refresh_num", args.refresh_num);
+    // }
 
     ret = mpi->control(ctx, MPP_ENC_SET_CFG, cfg);
     if (ret)
@@ -1777,7 +1730,7 @@ void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value,
         return;
     c = fill_int_string(ptr, value, index, mb_w / 2);
     index += 16 * c;
-    if (period)
+    if (!period)
     {
         fill_one_char(ptr, (unsigned char (*)[32])秒计数, index, mb_w / 2);
     }

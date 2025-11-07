@@ -377,15 +377,18 @@ static T_DjiReturnCode GimbalCallback(const uint8_t *data, uint16_t dataSize,
     static T_DjiFcSubscriptionGimbalAngles lastGimbalAngles = {0};
     T_DjiFcSubscriptionGimbalAngles *gimbalAngles = (T_DjiFcSubscriptionGimbalAngles *) data;
     dji_f32_t pitch_speed;
+    sbgcGetAngles_t GetAngles = {0};
 
     USER_UTIL_UNUSED(dataSize);
     USER_UTIL_UNUSED(timestamp);
 
     if(lastGimbalAngles.x!=gimbalAngles->x)
     {
+        //获取当前sbgc云台角度
+        // SBGC32_GetAngles(&SBGC32_Device, &GetAngles);
+
         pitch_speed = (gimbalAngles->x - lastGimbalAngles.x)/0.02;//50Hz
         lastGimbalAngles.x = gimbalAngles->x;
-
         Control.mode[PITCH] = CtrlMODE_ANGLE|CtrlFLAG_MIX_FOLLOW;
         Control.AxisC[PITCH].angle = sbgcAngleToDegree(gimbalAngles->x); // unit: degree
         Control.AxisC[PITCH].speed = sbgcSpeedToValue(pitch_speed);           // unit: degree/s

@@ -86,7 +86,6 @@ extern "C"
     void focus_near(CamSource *ctx);
     void focus_far(CamSource *ctx);
     RgaSURF_FORMAT change_MppFmt2RkFmt(MppFrameFormat fmt);
-
 }
 
 #endif 

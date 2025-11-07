@@ -19,7 +19,7 @@
 #include <stddef.h>
 
 /* Serial port configuration - modify these macros as needed */
-#define BRIDGE_UART_DEVICE      "/dev/ttyS7"
+#define BRIDGE_UART_DEVICE      "/dev/ttyS6"
 #define BRIDGE_UART_BAUDRATE    B921600         /* Matches STM32 USART1 */
 #define BRIDGE_UART_TIMEOUT_MS  1000            /* Read timeout in milliseconds */
 
