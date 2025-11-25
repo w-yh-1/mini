@@ -57,7 +57,7 @@ static const T_DjiWidgetHandlerListItem s_widgetHandlerList[] = {
     {3, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {4, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {5, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {6, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}
+    {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}
 };
 
 
@@ -211,7 +211,7 @@ static void *DjiTest_WidgetTask(void *arg)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     USER_UTIL_UNUSED(arg);
-
+    s_widgetValueList[1]=50; //set gain default value
     while (1)
     {
         djiStat = osalHandler->GetTimeMs(&sysTimeMs);
@@ -246,6 +246,12 @@ static void *DjiTest_WidgetTask(void *arg)
 
 extern int set_uv_color(uint value);
 extern int set_uv_gain(uint value);
+extern int camera_set_horz_dist_correction(int v);
+extern int camera_set_horz_ang_correction(int v);
+extern int camera_set_vert_dist_correction(int v);
+extern int camera_set_vert_ang_correction(int v);
+extern int camera_set_scale_factor(float v);
+extern int camera_correction_factor_save();
 static T_DjiReturnCode DjiTestWidget_SetWidgetValue(E_DjiWidgetType widgetType, uint32_t index, int32_t value,
                                                     void *userData)
 {
@@ -265,24 +271,28 @@ USER_UTIL_UNUSED(userData);
         if(value!=s_widgetValueList[index])
         {
             USER_LOG_INFO("set_uv_gain=%u\n", value);
-            set_uv_gain(value);
+            set_uv_gain((float)value/3.3+45);
         }
         break;
     case 2:
-        // set_uv_hor_dist_correction(value)
+        camera_set_horz_dist_correction(value);
         break;
     case 3:
-        // set_uv_hor_ang_correction(value)
+        camera_set_horz_ang_correction(value);
         break;
     case 4:
-        // set_uv_ver_dist_correction(value)
+        camera_set_vert_dist_correction(value);
         break;
     case 5:
-        // set_uv_ver_ang_correction(value)
+        camera_set_vert_ang_correction(value);
         break;
     case 6:
-        // correction_factor_save();
+        camera_set_scale_factor((float)value / 10.0f);
         break;
+    }
+    if(index>=2&&index<=6)
+    {
+        camera_correction_factor_save();
     }
     s_widgetValueList[index] = value;
 
@@ -298,18 +308,6 @@ static T_DjiReturnCode DjiTestWidget_GetWidgetValue(E_DjiWidgetType widgetType, 
     {
     // case 0:
     //     s_widgetValueList[3] = get_uv_gain();
-    //     break;
-    // case 1:
-    //     s_widgetValueList[5] = get_uv_hor_dist_correction();
-    //     break;
-    // case 2:
-    //     s_widgetValueList[6] = get_uv_hor_ang_correction();
-    //     break;
-    // case 3:
-    //     s_widgetValueList[7] = get_uv_ver_dist_correction();
-    //     break;
-    // case 4:
-    //     s_widgetValueList[8] = get_uv_ver_ang_correction();
     //     break;
     default:
         break;

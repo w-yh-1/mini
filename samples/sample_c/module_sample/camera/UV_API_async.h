@@ -7,17 +7,22 @@
 extern "C"
 {
 #endif
-
-	// 事件类型（同步到实现文件）
-	enum
-	{
-		UV_EVENT_ACK = 1,
-		UV_EVENT_GAIN = 2,
-		UV_EVENT_PHOTON_COUNT = 3,
-		UV_EVENT_ERROR = 4
-	};
-
 	// Opaque 句柄
+	typedef enum
+	{
+		CMD_NONE = 0,
+		CMD_SET_HV_GAIN,
+		CMD_GET_HV_GAIN,
+		CMD_SET_FREQ,
+		CMD_GET_PHOTON,
+		CMD_ENABLE_REGION,
+		CMD_SET_X_START,
+		CMD_SET_WIDTH,
+		CMD_SET_Y_START,
+		CMD_SET_HEIGHT,
+		CMD_SET_UV_COLOR
+	} uv_cmd_kind_t;
+	
 	typedef struct uv_async uv_async_t;
 
 	// 全局回调（持续事件/广播，如定时光子数）

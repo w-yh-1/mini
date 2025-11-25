@@ -620,8 +620,9 @@
       },
       {
         "widget_index": 6,
-        "widget_type": "button",
-        "widget_name": "保存校正"
+        "widget_type": "int_input_box",
+        "widget_name": "缩放校正",
+        "int_input_box_hint": "单位:0.1"
       }
     ]
   }

@@ -50,49 +50,54 @@
 #include <im2d_buffer.h>
 
 typedef unsigned long long __u64;
-typedef  unsigned int __u32;
+typedef unsigned int __u32;
 
-struct dma_heap_allocation_data {
-	__u64 len;
-	__u32 fd;
-	__u32 fd_flags;
-	__u64 heap_flags;
+struct dma_heap_allocation_data
+{
+    __u64 len;
+    __u32 fd;
+    __u32 fd_flags;
+    __u64 heap_flags;
 };
 
-#define DMA_HEAP_IOC_MAGIC		'H'
-#define DMA_HEAP_IOCTL_ALLOC	_IOWR(DMA_HEAP_IOC_MAGIC, 0x0,\
-				      struct dma_heap_allocation_data)
+#define DMA_HEAP_IOC_MAGIC 'H'
+#define DMA_HEAP_IOCTL_ALLOC _IOWR(DMA_HEAP_IOC_MAGIC, 0x0, \
+                                   struct dma_heap_allocation_data)
 
-#define DMA_BUF_SYNC_READ      (1 << 0)
-#define DMA_BUF_SYNC_WRITE     (2 << 0)
-#define DMA_BUF_SYNC_RW        (DMA_BUF_SYNC_READ | DMA_BUF_SYNC_WRITE)
-#define DMA_BUF_SYNC_START     (0 << 2)
-#define DMA_BUF_SYNC_END       (1 << 2)
+#define DMA_BUF_SYNC_READ (1 << 0)
+#define DMA_BUF_SYNC_WRITE (2 << 0)
+#define DMA_BUF_SYNC_RW (DMA_BUF_SYNC_READ | DMA_BUF_SYNC_WRITE)
+#define DMA_BUF_SYNC_START (0 << 2)
+#define DMA_BUF_SYNC_END (1 << 2)
 
-struct dma_buf_sync {
-	__u64 flags;
+struct dma_buf_sync
+{
+    __u64 flags;
 };
 
-#define DMA_BUF_BASE		'b'
-#define DMA_BUF_IOCTL_SYNC	_IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
+#define DMA_BUF_BASE 'b'
+#define DMA_BUF_IOCTL_SYNC _IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
 
-#define CMA_HEAP_SIZE	1024 * 1024
+#define CMA_HEAP_SIZE 1024 * 1024
 
-int dma_sync_device_to_cpu(int fd) {
+int dma_sync_device_to_cpu(int fd)
+{
     struct dma_buf_sync sync = {0};
 
     sync.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_RW;
     return ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
 }
 
-int dma_sync_cpu_to_device(int fd) {
+int dma_sync_cpu_to_device(int fd)
+{
     struct dma_buf_sync sync = {0};
 
     sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_RW;
     return ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
 }
 
-int dma_buf_alloc(const char *path, size_t size, int *fd, void **va) {
+int dma_buf_alloc(const char *path, size_t size, int *fd, void **va)
+{
     int ret;
     int prot;
     void *mmap_va;
@@ -101,7 +106,8 @@ int dma_buf_alloc(const char *path, size_t size, int *fd, void **va) {
 
     /* open dma_heap fd */
     dma_heap_fd = open(path, O_RDWR);
-    if (dma_heap_fd < 0) {
+    if (dma_heap_fd < 0)
+    {
         printf("open %s fail!\n", path);
         return dma_heap_fd;
     }
@@ -112,7 +118,8 @@ int dma_buf_alloc(const char *path, size_t size, int *fd, void **va) {
     buf_data.len = size;
     buf_data.fd_flags = O_CLOEXEC | O_RDWR;
     ret = ioctl(dma_heap_fd, DMA_HEAP_IOCTL_ALLOC, &buf_data);
-    if (ret < 0) {
+    if (ret < 0)
+    {
         printf("RK_DMA_HEAP_ALLOC_BUFFER failed\n");
         return ret;
     }
@@ -125,7 +132,8 @@ int dma_buf_alloc(const char *path, size_t size, int *fd, void **va) {
 
     /* mmap contiguors buffer to user */
     mmap_va = (void *)mmap(NULL, buf_data.len, prot, MAP_SHARED, buf_data.fd, 0);
-    if (mmap_va == MAP_FAILED) {
+    if (mmap_va == MAP_FAILED)
+    {
         printf("mmap failed: %s\n", strerror(errno));
         return -errno;
     }
@@ -138,10 +146,11 @@ int dma_buf_alloc(const char *path, size_t size, int *fd, void **va) {
     return 0;
 }
 
-void dma_buf_free(size_t size, int *fd, void *va) {
+void dma_buf_free(size_t size, int *fd, void *va)
+{
     int len;
 
-    len =  size;
+    len = size;
     munmap(va, len);
 
     close(*fd);
@@ -151,24 +160,28 @@ void dma_buf_free(size_t size, int *fd, void *va) {
 int get_dma_buf(DMA_Buffer *buf, uint32_t W, uint32_t H, int rk_fmt)
 {
     int ret;
-    buf->bpp = get_bpp_from_format(rk_fmt)*8;
-    buf->size = W * H * buf->bpp/8;
+    buf->bpp = get_bpp_from_format(rk_fmt) * 8;
+    buf->size = W * H * buf->bpp / 8;
     buf->width = W;
     buf->height = H;
+    // 初始化按行步长（字节）。对于打包格式（RGB888、BGRA8888等），pitch=width*bytes_per_pixel。
+    // 注意：若未来引入对齐需求，应在此按硬件要求对齐并相应调整 size。
+    buf->pitch = W * (buf->bpp / 8);
 
     ret = dma_buf_alloc(DMA_HEAP_DMA32_UNCACHED_PATH, buf->size, &buf->dma_fd, &buf->ptr);
-    if (ret < 0) {
+    if (ret < 0)
+    {
         printf("alloc dma32_heap buffer failed!\n");
         return -1;
     }
 
     buf->rga_handle = importbuffer_fd(buf->dma_fd, buf->size);
-    buf->rga_buf = wrapbuffer_handle(buf->rga_handle, buf->width, buf->height,rk_fmt);
+    buf->rga_buf = wrapbuffer_handle(buf->rga_handle, buf->width, buf->height, rk_fmt);
     return 0;
 }
-  int release_drm_buffer(DMA_Buffer *buf)
+int release_drm_buffer(DMA_Buffer *buf)
 {
-    releasebuffer_handle(buf->rga_handle); 
-    dma_buf_free(buf->size, &buf->dma_fd, buf->ptr);
-    return 0; 
+    releasebuffer_handle(buf->rga_handle);
+    dma_buf_free(buf->size, &buf->dma_fd, buf->ptr); 
+    return 0;
 }

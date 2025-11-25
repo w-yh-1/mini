@@ -41,13 +41,14 @@
 #define SDCARD_TOTAL_SPACE_IN_MB                (32 * 1024)
 #define SDCARD_PER_PHOTO_SPACE_IN_MB            (4)
 #define SDCARD_PER_SECONDS_RECORD_SPACE_IN_MB   (2)
-#define ZOOM_OPTICAL_FOCAL_MAX_LENGTH           (300)
+// #define ZOOM_OPTICAL_FOCAL_MAX_LENGTH           (300)
+#define ZOOM_OPTICAL_FOCAL_MAX_LENGTH           (10)
 #define ZOOM_OPTICAL_FOCAL_MIN_LENGTH           (10)
 #define ZOOM_OPTICAL_FOCAL_LENGTH_STEP          (10)
 #define ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP     (5)
 #define ZOOM_DIGITAL_BASE_FACTOR                (1.0)
-#define ZOOM_DIGITAL_STEP_FACTOR                (0.1)
-#define ZOOM_DIGITAL_MAX_FACTOR                 (6.0)
+#define ZOOM_DIGITAL_STEP_FACTOR                (1.0)
+#define ZOOM_DIGITAL_MAX_FACTOR                 (4.0)
 #define FOCUS_MAX_RINGVALUE                     (1000)
 #define FOCUS_MID_RINGVALUE                     (500)
 #define IMAGE_SENSOR_X_SIZE                     (88.0f) // unit: 0.1mm
@@ -106,7 +107,7 @@ static E_DjiCameraZoomSpeed s_cameraZoomSpeed = DJI_CAMERA_ZOOM_SPEED_NORMAL;
 static uint32_t s_cameraOpticalZoomFocalLength = ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
 static dji_f32_t s_cameraDigitalZoomFactor = ZOOM_DIGITAL_BASE_FACTOR;
 static bool s_isStartContinuousOpticalZoom = false;
-static bool s_isOpticalZoomReachLimit = false;
+// static bool s_isOpticalZoomReachLimit = false;
 static T_DjiMutexHandle s_zoomMutex = {0};
 
 static bool s_isTapZoomEnabled = false;
@@ -172,6 +173,8 @@ static void *UserCamera_Task(void *arg);
 /* Exported functions definition ---------------------------------------------*/
 extern int pause_cam_stream();
 extern int resume_cam_stream();
+extern int take_snapshot_auto();
+extern void camera_set_zoom_ratio(float v);
 /* Private functions definition-----------------------------------------------*/
 static T_DjiReturnCode GetSystemState(T_DjiCameraSystemState *systemState)
 {
@@ -221,7 +224,7 @@ static T_DjiReturnCode SetMode(E_DjiCameraMode mode)
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
-
+extern int start_recording();
 static T_DjiReturnCode StartRecordVideo(void)
 {
     T_DjiReturnCode djiStat;
@@ -241,8 +244,10 @@ static T_DjiReturnCode StartRecordVideo(void)
     }
 
     s_cameraState.isRecording = true;
+    start_recording();
     USER_LOG_INFO("start record video");
     DjiTest_WidgetLogAppend("start record video");
+    
 
 out:
     djiStat = osalHandler->MutexUnlock(s_commonMutex);
@@ -254,6 +259,7 @@ out:
     return returnCode;
 }
 
+extern void stop_recording();
 static T_DjiReturnCode StopRecordVideo(void)
 {
     T_DjiReturnCode djiStat;
@@ -274,6 +280,7 @@ static T_DjiReturnCode StopRecordVideo(void)
 
     s_cameraState.isRecording = false;
     s_cameraState.currentVideoRecordingTimeInSeconds = 0;
+    stop_recording();
     USER_LOG_INFO("stop record video");
     DjiTest_WidgetLogAppend("stop record video");
 
@@ -650,7 +657,7 @@ static T_DjiReturnCode SetDigitalZoomFactor(dji_f32_t factor)
 
     USER_LOG_INFO("set digital zoom factor:%.2f", factor);
     s_cameraDigitalZoomFactor = factor;
-
+    camera_set_zoom_ratio(factor);
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
@@ -672,10 +679,11 @@ static T_DjiReturnCode SetOpticalZoomFocalLength(uint32_t focalLength)
     }
 
     USER_LOG_INFO("set optical zoom focal length:%d", focalLength);
-    s_isOpticalZoomReachLimit = false;
+    // s_isOpticalZoomReachLimit = false;
     s_cameraDigitalZoomFactor = ZOOM_DIGITAL_BASE_FACTOR;
     s_cameraOpticalZoomFocalLength = ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
-
+    camera_set_zoom_ratio(ZOOM_DIGITAL_BASE_FACTOR);
+    USER_LOG_INFO("set digital zoom factor:%.2f", s_cameraDigitalZoomFactor);
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
@@ -950,7 +958,7 @@ static T_DjiReturnCode DjiTest_CameraRotationGimbal(T_TestCameraGimbalRotationAr
 #pragma GCC diagnostic ignored "-Wmissing-noreturn"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 #endif
-extern int take_snapshot_auto();
+
 static void *UserCamera_Task(void *arg)
 {
     static uint32_t photoCnt = 0;
@@ -964,6 +972,7 @@ static void *UserCamera_Task(void *arg)
     uint32_t intervalFreq = 10;
 
     USER_UTIL_UNUSED(arg);
+    
 
     while (1) {
         osalHandler->TaskSleepMs(1000 / PAYLOAD_CAMERA_EMU_TASK_FREQ);
@@ -1040,9 +1049,8 @@ static void *UserCamera_Task(void *arg)
             USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
             continue;
         }
-
-        // 10Hz
-        if (USER_UTIL_IS_WORK_TURN(step, 10, PAYLOAD_CAMERA_EMU_TASK_FREQ)) {
+        // 2Hz
+        if (USER_UTIL_IS_WORK_TURN(step, 2, PAYLOAD_CAMERA_EMU_TASK_FREQ)) {
             returnCode = osalHandler->MutexLock(s_zoomMutex);
             if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
                 USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
@@ -1054,24 +1062,24 @@ static void *UserCamera_Task(void *arg)
             if (s_isStartContinuousOpticalZoom == true) {
                 tempDigitalFactor = s_cameraDigitalZoomFactor;
                 tempFocalLength = (int32_t) s_cameraOpticalZoomFocalLength;
-                if (s_isOpticalZoomReachLimit == false) {
-                    if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_IN) {
-                        tempFocalLength += ((int) s_cameraZoomSpeed - DJI_CAMERA_ZOOM_SPEED_SLOWEST + 1) *
-                                           ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP;
-                    } else if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_OUT) {
-                        tempFocalLength -= ((int) s_cameraZoomSpeed - DJI_CAMERA_ZOOM_SPEED_SLOWEST + 1) *
-                                           ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP;
-                    }
+                // if (s_isOpticalZoomReachLimit == false) {
+                //     if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_IN) {
+                //         tempFocalLength += ((int) s_cameraZoomSpeed - DJI_CAMERA_ZOOM_SPEED_SLOWEST + 1) *
+                //                            ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP;
+                //     } else if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_OUT) {
+                //         tempFocalLength -= ((int) s_cameraZoomSpeed - DJI_CAMERA_ZOOM_SPEED_SLOWEST + 1) *
+                //                            ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP;
+                //     }
 
-                    if (tempFocalLength > ZOOM_OPTICAL_FOCAL_MAX_LENGTH) {
-                        s_isOpticalZoomReachLimit = true;
-                        tempFocalLength = ZOOM_OPTICAL_FOCAL_MAX_LENGTH;
-                    }
+                //     if (tempFocalLength > ZOOM_OPTICAL_FOCAL_MAX_LENGTH) {
+                //         s_isOpticalZoomReachLimit = true;
+                //         tempFocalLength = ZOOM_OPTICAL_FOCAL_MAX_LENGTH;
+                //     }
 
-                    if (tempFocalLength < ZOOM_OPTICAL_FOCAL_MIN_LENGTH) {
-                        tempFocalLength = ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
-                    }
-                } else {
+                //     if (tempFocalLength < ZOOM_OPTICAL_FOCAL_MIN_LENGTH) {
+                //         tempFocalLength = ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
+                //     }
+                // } else {
                     if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_IN) {
                         tempDigitalFactor += (dji_f32_t) ZOOM_DIGITAL_STEP_FACTOR;
                     } else if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_OUT) {
@@ -1083,12 +1091,13 @@ static void *UserCamera_Task(void *arg)
                     }
 
                     if (tempDigitalFactor < (dji_f32_t) ZOOM_DIGITAL_BASE_FACTOR) {
-                        s_isOpticalZoomReachLimit = false;
+                        // s_isOpticalZoomReachLimit = false;
                         tempDigitalFactor = ZOOM_DIGITAL_BASE_FACTOR;
                     }
-                }
+                // }
                 s_cameraOpticalZoomFocalLength = (uint16_t) tempFocalLength;
                 s_cameraDigitalZoomFactor = tempDigitalFactor;
+                camera_set_zoom_ratio(s_cameraDigitalZoomFactor);
             }
 #endif
 

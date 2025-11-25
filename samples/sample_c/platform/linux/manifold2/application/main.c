@@ -94,6 +94,8 @@ static T_DjiReturnCode DjiTest_WriteHighPowerApplyPin(E_DjiPowerManagementPinSta
 static void DjiUser_NormalExitHandler(int signalNum);
 static void OutPutFunc(void *data, size_t len, bool isEnd);
 static bool GetVideoStreamState();
+
+static void mount_SD_card();
 /* Exported functions definition ---------------------------------------------*/
 extern bool CameraMediaStartService(void *output_func);
 int main(int argc, char **argv)
@@ -241,7 +243,7 @@ int main(int argc, char **argv)
         };
         T_DjiTestUpgradeConfig testUpgradeConfig = {
             .firmwareVersion = firmwareVersion,
-            .transferType = DJI_FIRMWARE_TRANSFER_TYPE_DCFTP,
+            .transferType = DJI_FIRMWARE_TRANSFER_TYPE_FTP,
             .needReplaceProgramBeforeReboot = true};
         if (DjiTest_UpgradeStartService(&linuxUpgradePlatformOpt, testUpgradeConfig) !=
             DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
@@ -508,6 +510,8 @@ static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void)
         .TcpSendData = Osal_TcpSendData,
         .TcpRecvData = Osal_TcpRecvData,
     };
+
+    mount_SD_card(); 
 
     returnCode = DjiPlatform_RegOsalHandler(&osalHandler);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
@@ -932,6 +936,55 @@ static bool GetVideoStreamState()
     }
     return true;
 }
+
+static void mount_SD_card()
+{
+    // 检查设备是否存在
+    if (system("test -b /dev/mmcblk1p1") == 0)
+    {
+        printf("/dev/mmcblk1p1 设备存在。\n");
+
+        // 检查设备是否已挂载
+        if (system("mount | grep -q '/dev/mmcblk1p1'") == 0)
+        {
+            if (system("mount | grep '/dev/mmcblk1p1' | grep -q '/mnt/sdcard'") == 0)
+            {
+                printf("设备已挂载到 /mnt/sdcard/。\n");
+                return;
+            }
+            else
+            {
+                printf("设备未挂载到 /mnt/sdcard/，正在处理...\n");
+                // 备份数据到当前挂载点
+                system("cp -r /mnt/sdcard/* $(mount | grep '/dev/mmcblk1p1' | awk '{print $3}')/");
+            }
+        }
+        else
+        {
+            printf("设备未挂载，正在创建临时目录并挂载...\n");
+            // 创建临时挂载点
+            system("mkdir -p /tmp/sdcard_temp");
+            // 将SD卡挂载到临时目录
+            system("mount /dev/mmcblk1p1 /tmp/sdcard_temp");
+            // 备份数据到临时目录
+            system("cp -r /mnt/sdcard/* /tmp/sdcard_temp/");
+        }
+        // 卸载SD卡
+        system("umount /dev/mmcblk1p1");
+        // 清空/mnt/sdcard/目录下的内容
+        system("rm -rf /mnt/sdcard/*"); 
+
+        // 将SD卡挂载到/mnt/sdcard/
+        system("mount /dev/mmcblk1p1 /mnt/sdcard/");
+  
+        printf("SD卡已挂载到 /mnt/sdcard/ 并且原始数据已保留。\n");
+    }
+    else
+    {
+        printf("/dev/mmcblk1p1 设备不存在。\n");
+    }
+}
+
 #pragma GCC diagnostic pop
 
 /****************** (C) COPYRIGHT DJI Innovations *****END OF FILE****/

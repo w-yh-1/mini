@@ -412,9 +412,9 @@ void Encoder::draw_en_osd(char *ptr, int DW_per_line)
     // fill_string(ptr, "uvirsys{", 0, DW_per_line);
     ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
 
-    fill_string(ptr, "mode", 0, DW_per_line);      // MODE
-    fill_one_char(ptr, &模式[8], 64, DW_per_line); // MODE:
-    fill_string(ptr, "vl", 32 * 3, DW_per_line);   // MODE: VL
+    // fill_string(ptr, "mode", 0, DW_per_line);      // MODE
+    // fill_one_char(ptr, &模式[8], 64, DW_per_line); // MODE:
+    // fill_string(ptr, "vl", 32 * 3, DW_per_line);   // MODE: VL
     ptr += DW_per_line * 1024;                     // 下一行
 
     fill_string(ptr, "gain", 0, DW_per_line); // GAIN
@@ -422,7 +422,7 @@ void Encoder::draw_en_osd(char *ptr, int DW_per_line)
         fill_one_char(ptr, (unsigned char (*)[32]) & 增益[i * 4][0], i * 32, DW_per_line); // GAIN:   %
     ptr += DW_per_line * 1024;                                                             // 下一行
 
-    fill_string(ptr, "uvpt", 0, DW_per_line);      // UVPT
+    fill_string(ptr, "cont", 0, DW_per_line);      // UVPT
     fill_one_char(ptr, &计数[8], 64, DW_per_line); // UVPT:
     count = fill_int_string(ptr, 0, 3 * 32, DW_per_line);
     fill_one_char(ptr, (unsigned char (*)[32])分计数, 3 * 32 + count * 16, DW_per_line, 6); // UVPT:0%
@@ -544,14 +544,14 @@ void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
     //     fill_one_char(ptr, (unsigned char(*)[32]) & 紫红光电[i * 4][0], i * 32, DW_per_line);
     // }
     ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
-    for (i = 0; i < 3; i++)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 模式[i * 4][0], i * 32, DW_per_line);
-    }
-    for (i = 3; i < 5; i++)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 可见[(i - 3) * 4][0], i * 32, DW_per_line);
-    }
+    // for (i = 0; i < 3; i++)
+    // {
+    //     fill_one_char(ptr, (unsigned char (*)[32]) & 模式[i * 4][0], i * 32, DW_per_line);
+    // }
+    // for (i = 3; i < 5; i++)
+    // {
+    //     fill_one_char(ptr, (unsigned char (*)[32]) & 可见[(i - 3) * 4][0], i * 32, DW_per_line);
+    // }
     ptr += DW_per_line * 1024; // 下一行
     for (i = 0; i < 5; i++)
     {
@@ -679,8 +679,8 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
         buf_size = mpp_buffer_get_size(buf);
     // 公司名称，模式，光子数，距离，增益，缺陷
     region[0].inverse = 0;
-    region[0].start_mb_x = 0;
-    region[0].start_mb_y = 21;
+    region[0].start_mb_x = 7;
+    region[0].start_mb_y = 0;
     region[0].num_mb_x = mb_w;
     region[0].num_mb_y = mb_h;
     region[0].buf_offset = 0;

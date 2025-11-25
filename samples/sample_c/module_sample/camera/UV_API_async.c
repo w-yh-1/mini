@@ -61,20 +61,7 @@
 #include "UV_API.h"
 #include "UV_API_async.h"
 
-typedef enum
-{
-    CMD_NONE = 0,
-    CMD_SET_HV_GAIN,
-    CMD_GET_HV_GAIN,
-    CMD_SET_FREQ,
-    CMD_GET_PHOTON,
-    CMD_ENABLE_REGION,
-    CMD_SET_X_START,
-    CMD_SET_WIDTH,
-    CMD_SET_Y_START,
-    CMD_SET_HEIGHT,
-    CMD_SET_UV_COLOR
-} uv_cmd_kind_t;
+
 
 typedef struct
 {
@@ -214,69 +201,63 @@ static void *uv_async_thread(void *arg)
             case CMD_SET_HV_GAIN:
             {
                 rc = set_high_voltage_gain(ctx->fd, cmd.a);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.a : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_HV_GAIN, rc, cmd.a);
             }
             break;
             case CMD_GET_HV_GAIN:
             {
                 uint16_t gain = 0;
                 rc = read_high_voltage_gain(ctx->fd, &gain);
-                if (rc == UV_OK)
-                    uv_emit_cmd(ctx, &cmd, UV_EVENT_GAIN, UV_OK, gain);
-                else
-                    uv_emit_cmd(ctx, &cmd, UV_EVENT_GAIN, rc, 0);
+                uv_emit_cmd(ctx, &cmd, CMD_GET_HV_GAIN, rc, gain);
             }
             break;
             case CMD_SET_FREQ:
             {
                 rc = set_counting_frequency(ctx->fd, cmd.a);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.a : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_FREQ, rc, cmd.a);
             }
             break;
             case CMD_GET_PHOTON:
             {
                 uint32_t cnt = 0;
                 rc = read_photon_count(ctx->fd, &cnt);
-                if (rc == UV_OK)
-                    uv_emit_cmd(ctx, &cmd, UV_EVENT_PHOTON_COUNT, UV_OK, cnt);
-                else
-                    uv_emit_cmd(ctx, &cmd, UV_EVENT_PHOTON_COUNT, rc, 0);
+                uv_emit_cmd(ctx, &cmd, CMD_GET_PHOTON, rc, cnt);
             }
             break;
             case CMD_ENABLE_REGION:
             {
                 rc = enable_region_photon_counting(ctx->fd, (uint8_t)cmd.c);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.c : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_ENABLE_REGION, rc, cmd.c);
             }
             break;
             case CMD_SET_X_START:
             {
                 rc = set_region_x_start(ctx->fd, cmd.a);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.a : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_X_START, rc, cmd.a);
             }
             break;
             case CMD_SET_WIDTH:
             {
                 rc = set_region_width(ctx->fd, cmd.a);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.a : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_WIDTH, rc, cmd.a);
             }
             break;
             case CMD_SET_Y_START:
             {
                 rc = set_region_y_start(ctx->fd, cmd.a);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.a : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_Y_START, rc, cmd.a);
             }
             break;
             case CMD_SET_HEIGHT:
             {
                 rc = set_region_height(ctx->fd, cmd.a);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.a : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_HEIGHT, rc, cmd.a);
             }
             break;
             case CMD_SET_UV_COLOR:
             {
                 rc = set_photons_color(ctx->fd, cmd.c);
-                uv_emit_cmd(ctx, &cmd, UV_EVENT_ACK, rc, (rc == UV_OK) ? cmd.c : 0);
+                uv_emit_cmd(ctx, &cmd, CMD_SET_UV_COLOR, rc, cmd.c);
             }
             break;
             default:
@@ -293,15 +274,11 @@ static void *uv_async_thread(void *arg)
         if (elapsed >= ctx->poll_interval_ms)
         {
             uint32_t cnt = 0;
-            int rc = read_photon_count(ctx->fd, &cnt);
-            if (rc == UV_OK)
-            {
-                uv_async_emit(ctx, UV_EVENT_PHOTON_COUNT, UV_OK, cnt);
-            }
-            else
-            {
-                uv_async_emit(ctx, UV_EVENT_ERROR, rc, 0);
-            }
+            int ret = UV_OK;
+            ret = read_photon_count(ctx->fd, &cnt);
+            // 注意：此处不是处理队列命令，不应引用未初始化的 cmd。
+            // 直接走全局回调，避免解引用随机 once_cb 导致段错误。
+            uv_async_emit(ctx, CMD_GET_PHOTON, ret, cnt);
             ctx->last_poll = now;
             continue;
         }

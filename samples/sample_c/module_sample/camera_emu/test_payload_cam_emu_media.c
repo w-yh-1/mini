@@ -784,9 +784,10 @@ static T_DjiReturnCode GetMediaFileDir(char *dirPath)
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("Get file current path error, stat = 0x%08llX", returnCode);
         return returnCode;
-    }
+    }  
 
-    snprintf(dirPath, DJI_FILE_PATH_SIZE_MAX, "%smedia_file", curFileDirPath);
+    // snprintf(dirPath, DJI_FILE_PATH_SIZE_MAX, "%smedia_file", curFileDirPath);
+    snprintf(dirPath, DJI_FILE_PATH_SIZE_MAX, "/mnt/sdcard/IMG");
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
