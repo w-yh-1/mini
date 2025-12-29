@@ -131,6 +131,9 @@ extern "C"
     bool camera_correction_factor_load();
     void camera_set_zoom_ratio(float v);
     float camera_get_zoom_ratio();
+    // 切换快照 OSD 语言（true=中文，false=英文）
+    void camera_set_snapshot_osd_chinese(bool use_cn);
+    bool camera_get_snapshot_osd_chinese();
 }
 
 camera_process::camera_process(/* args */)

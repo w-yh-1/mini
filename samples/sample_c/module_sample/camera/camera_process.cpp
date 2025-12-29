@@ -17,6 +17,7 @@
 #include <sys/eventfd.h>
 #include <poll.h>
 #include "dji_camera_manager.h"
+#include "free_type_osd.h"
 
 #define CORRECTION_FACTOR_CONFIG_FILE "/usr/local/bin/correction.json"
 
@@ -35,6 +36,9 @@ static IM_STATUS rga_imcolorkey(const rga_buffer_t src,
 static uv_async_t *uv_ctx = NULL;
 static uint32_t uv_photons = 0;
 static uint32_t uv_gain = 0;
+// FreeType OSD instance (used for snapshot overlay)
+static FreeTypeOSD g_ftosd;
+static bool g_ftosd_inited = false;
 static void uv_cb_func(int et, int status, uint32_t value, void *user);
 static bool init_UV_async(uv_async_t **uv_ctx);
 static bool deinit_UV_async(uv_async_t *uv_ctx);
@@ -48,7 +52,8 @@ static inline void eventfd_notify(int efd)
         return;
     uint64_t one = 1;
     ssize_t n = write(efd, &one, sizeof(one));
-    (void)n;
+    // (void)n;
+
 }
 static inline void eventfd_drain(int efd)
 {
@@ -98,6 +103,26 @@ void *camera_process::snapshot_worker(void *arg)
                 {
                     USER_LOG_ERROR("snapshot invalid pitch=%d, fallback row_bytes=%d\n", stride_bytes, row_bytes);
                     stride_bytes = row_bytes;
+                }
+                // 在保存前叠加 OSD（时间、增益、光子数），如果 FreeType 初始化成功
+                if (g_ftosd_inited)
+                {
+                    char tb[64];
+                    time_t now = time(NULL);
+                    struct tm tmv;
+                    localtime_r(&now, &tmv);
+                    strftime(tb, sizeof(tb), "%Y-%m-%d %H:%M:%S", &tmv);
+                    char s1[128];
+                    char s2[64];
+                    snprintf(s1, sizeof(s1), "Time: %s", tb);
+                    snprintf(s2, sizeof(s2), "Gain: %u  Photons: %u", (unsigned)uv_gain, (unsigned)uv_photons);
+                    // 基线位置：左上角，留 10px 边距
+                    int px = 10;
+                    int py = 10 + 20; // baseline y，字体大小约24，取20作为近似
+                    g_ftosd.render_text(s1, base, width, height, stride_bytes, px, py, 255, 255, 255);
+                    // 第二行
+                    py += 24 + 4;
+                    g_ftosd.render_text(s2, base, width, height, stride_bytes, px, py, 255, 255, 255);
                 }
                 int rc = 0;
                 if (stride_bytes == row_bytes)
@@ -312,7 +337,32 @@ bool camera_process::init(pOutput_func output_func)
         return false;
     }
 
-    set_uv_gain(60); // 默认值
+    // 尝试在指定目录下寻找常见字库并初始化 FreeType OSD（非致命）
+    const char *font_dir = "/usr/share/fonts/source-han-sans-cn";
+    const char *font_candidates[] = {
+        "SourceHanSansCN-Regular.otf",
+        NULL
+    };
+    char font_path[512] = {0};
+    for (int i = 0; font_candidates[i] != NULL; ++i)
+    {
+        snprintf(font_path, sizeof(font_path), "%s/%s", font_dir, font_candidates[i]);
+        if (access(font_path, F_OK) == 0)
+        {
+            if (g_ftosd.init(font_path, 24))
+            {
+                g_ftosd_inited = true;
+                USER_LOG_INFO("FreeType OSD initialized with %s\n", font_path);
+            }
+            else
+            {
+                USER_LOG_ERROR("FreeType OSD init failed for %s\n", font_path);
+            }
+            break;
+        }
+    }
+
+    set_uv_gain(60); //默认值
 
     load_correction_factors(CORRECTION_FACTOR_CONFIG_FILE);
 
@@ -370,11 +420,7 @@ void camera_process::update_rects(int distance)
 {
     static int last_distance = 0;
     static float last_zoom_ratio = 1.0f;
-    if (distance == last_distance && zoom_ratio == last_zoom_ratio)
-    {
-        // 没有变化，直接返回
-        return;
-    }
+
     last_distance = distance;
     last_zoom_ratio = zoom_ratio;
     // 计算偏移
@@ -641,29 +687,56 @@ int resume_cam_stream()
 
 static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height)
 {
-    FILE *fp = fopen(filename, "wb");
-    if (!fp)
-        return -1;
+    if (!filename || !image_data || width <= 0 || height <= 0)
+    {
+        USER_LOG_ERROR("png save invalid args: fname=%p, data=%p, w=%d, h=%d\n", filename, image_data, width, height);
+        return -10;
+    }
 
-    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    // 写入到临时文件，成功后原子重命名，避免出现0字节或不完整文件
+    char tmpname[1024];
+    snprintf(tmpname, sizeof(tmpname), "%s.tmp", filename);
+    FILE *fp = fopen(tmpname, "wb");
+    if (!fp)
+    {
+        USER_LOG_ERROR("fopen failed: %s (errno=%d)\n", tmpname, errno);
+        return -1;
+    }
+
+    // libpng 错误/警告处理（便于定位问题）
+    auto png_error_fn = [](png_structp png_ptr, png_const_charp msg) {
+        USER_LOG_ERROR("[libpng] error: %s\n", msg);
+        longjmp(png_jmpbuf(png_ptr), 1);
+    };
+    auto png_warn_fn = [](png_structp, png_const_charp msg) {
+        USER_LOG_ERROR("[libpng] warn: %s\n", msg);
+    };
+
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, png_error_fn, png_warn_fn);
     if (!png_ptr)
     {
+        USER_LOG_ERROR("png_create_write_struct failed\n");
         fclose(fp);
+        unlink(tmpname);
         return -2;
     }
 
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr)
     {
+        USER_LOG_ERROR("png_create_info_struct failed\n");
         png_destroy_write_struct(&png_ptr, NULL);
         fclose(fp);
+        unlink(tmpname);
         return -3;
     }
 
     if (setjmp(png_jmpbuf(png_ptr)))
     {
         png_destroy_write_struct(&png_ptr, &info_ptr);
+        // 刷新并关闭临时文件并删除
         fclose(fp);
+        unlink(tmpname);
         return -4;
     }
 
@@ -700,39 +773,90 @@ static int save_image_as_png(const char *filename, const uint8_t *image_data, in
     png_write_info(png_ptr, info_ptr);
 
     // 行指针数组（紧凑 RGB，stride = width*3）
-    png_bytep row_pointers[height];
+    std::vector<png_bytep> row_pointers;
+    row_pointers.resize((size_t)height);
     for (int y = 0; y < height; ++y)
     {
-        row_pointers[y] = (png_bytep)(image_data + (size_t)y * width * 3);
+        row_pointers[(size_t)y] = (png_bytep)(image_data + (size_t)y * width * 3);
     }
 
-    png_write_image(png_ptr, row_pointers);
+    png_write_image(png_ptr, row_pointers.data());
     png_write_end(png_ptr, NULL);
 
+    // 强制落盘，降低掉电导致的空文件概率
+    fflush(fp);
+    int fd = fileno(fp);
+    if (fd >= 0)
+        fsync(fd);
+
     png_destroy_write_struct(&png_ptr, &info_ptr);
-    fclose(fp);
+    int cerr = fclose(fp);
+    if (cerr != 0)
+    {
+        USER_LOG_ERROR("fclose failed for %s (errno=%d)\n", tmpname, errno);
+        unlink(tmpname);
+        return -5;
+    }
+
+    // 原子重命名
+    if (rename(tmpname, filename) != 0)
+    {
+        USER_LOG_ERROR("rename %s -> %s failed (errno=%d)\n", tmpname, filename, errno);
+        unlink(tmpname);
+        return -6;
+    }
     return 0;
 }
 
 // 支持任意 stride 的 PNG 写入，避免额外 memcpy
 static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes)
 {
-    FILE *fp = fopen(filename, "wb");
-    if (!fp)
-        return -1;
+    if (!filename || !image_data || width <= 0 || height <= 0)
+    {
+        USER_LOG_ERROR("png(save_stride) invalid args: fname=%p, data=%p, w=%d, h=%d\n", filename, image_data, width, height);
+        return -10;
+    }
+    const int row_bytes = width * 3;
+    if (stride_bytes < row_bytes)
+    {
+        USER_LOG_ERROR("png(save_stride) bad stride: %d < row:%d\n", stride_bytes, row_bytes);
+        return -11;
+    }
 
-    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    char tmpname[1024];
+    snprintf(tmpname, sizeof(tmpname), "%s.tmp", filename);
+    FILE *fp = fopen(tmpname, "wb");
+    if (!fp)
+    {
+        USER_LOG_ERROR("fopen failed: %s (errno=%d)\n", tmpname, errno);
+        return -1;
+    }
+
+    // libpng 错误/警告处理（便于定位问题）
+    auto png_error_fn = [](png_structp png_ptr, png_const_charp msg) {
+        USER_LOG_ERROR("[libpng] error: %s\n", msg);
+        longjmp(png_jmpbuf(png_ptr), 1);
+    };
+    auto png_warn_fn = [](png_structp, png_const_charp msg) {
+        USER_LOG_ERROR("[libpng] warn: %s\n", msg);
+    };
+
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, png_error_fn, png_warn_fn);
     if (!png_ptr)
     {
+        USER_LOG_ERROR("png_create_write_struct failed\n");
         fclose(fp);
+        unlink(tmpname);
         return -2;
     }
 
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr)
     {
+        USER_LOG_ERROR("png_create_info_struct failed\n");
         png_destroy_write_struct(&png_ptr, NULL);
         fclose(fp);
+        unlink(tmpname);
         return -3;
     }
 
@@ -740,6 +864,7 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
     {
         png_destroy_write_struct(&png_ptr, &info_ptr);
         fclose(fp);
+        unlink(tmpname);
         return -4;
     }
 
@@ -776,17 +901,35 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
     png_write_info(png_ptr, info_ptr);
 
     // 行指针数组（带 stride）
-    png_bytep row_pointers[height];
+    std::vector<png_bytep> row_pointers;
+    row_pointers.resize((size_t)height);
     for (int y = 0; y < height; ++y)
     {
-        row_pointers[y] = (png_bytep)(image_data + (size_t)y * stride_bytes);
+        row_pointers[(size_t)y] = (png_bytep)(image_data + (size_t)y * stride_bytes);
     }
 
-    png_write_image(png_ptr, row_pointers);
+    png_write_image(png_ptr, row_pointers.data());
     png_write_end(png_ptr, NULL);
 
+    fflush(fp);
+    int fd = fileno(fp);
+    if (fd >= 0)
+        fsync(fd);
+
     png_destroy_write_struct(&png_ptr, &info_ptr);
-    fclose(fp);
+    int cerr = fclose(fp);
+    if (cerr != 0)
+    {
+        USER_LOG_ERROR("fclose failed for %s (errno=%d)\n", tmpname, errno);
+        unlink(tmpname);
+        return -5;
+    }
+    if (rename(tmpname, filename) != 0)
+    {
+        USER_LOG_ERROR("rename %s -> %s failed (errno=%d)\n", tmpname, filename, errno);
+        unlink(tmpname);
+        return -6;
+    }
     return 0;
 }
 

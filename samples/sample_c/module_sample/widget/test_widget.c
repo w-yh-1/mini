@@ -211,6 +211,7 @@ static void *DjiTest_WidgetTask(void *arg)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     USER_UTIL_UNUSED(arg);
+    s_widgetValueList[0] = 1; //set color default value
     s_widgetValueList[1]=50; //set gain default value
     while (1)
     {

@@ -170,6 +170,8 @@ static T_DjiReturnCode DjiTest_PowerOffNotificationCallback(bool *powerOffPrepar
 {
     USER_LOG_INFO("aircraft will power off soon.");
 
+    //调用系统关机指令
+    system("poweroff");
     *powerOffPreparationFlag = true;
      
     

@@ -111,6 +111,18 @@ else ()
     message(STATUS "Cannot Find PNG")
 endif (PNG_FOUND)
 
+# FreeType for OSD text rendering
+find_package(Freetype REQUIRED)
+if (FREETYPE_FOUND)
+    message(STATUS "Found Freetype installed in the system")
+    message(STATUS " - Includes: ${FREETYPE_INCLUDE_DIRS}")
+    message(STATUS " - Libraries: ${FREETYPE_LIBRARIES}")
+    include_directories(${FREETYPE_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} ${FREETYPE_LIBRARIES})
+else ()
+    message(FATAL_ERROR "Cannot Find Freetype")
+endif ()
+
 # 增加jsoncpp支持
 FIND_LIBRARY(JSONCPP_LIBRARY jsoncpp
     /usr/local/lib

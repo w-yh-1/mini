@@ -939,50 +939,63 @@ static bool GetVideoStreamState()
 
 static void mount_SD_card()
 {
-    // 检查设备是否存在
+    // 兼容 /dev/mmcblk1p1 与 /dev/mmcblk1 两种设备名
+    const char *devpath = NULL;
     if (system("test -b /dev/mmcblk1p1") == 0)
-    {
-        printf("/dev/mmcblk1p1 设备存在。\n");
+        devpath = "/dev/mmcblk1p1";
+    else if (system("test -b /dev/mmcblk1") == 0)
+        devpath = "/dev/mmcblk1";
 
-        // 检查设备是否已挂载
-        if (system("mount | grep -q '/dev/mmcblk1p1'") == 0)
+    if (!devpath)
+    {
+        printf("/dev/mmcblk1p1 或 /dev/mmcblk1 设备不存在。\n");
+        return;
+    }
+
+    printf("%s 设备存在。\n", devpath);
+
+    char cmd[256];
+    // 检查设备是否已挂载到任意位置
+    snprintf(cmd, sizeof(cmd), "mount | grep -q '%s'", devpath);
+    if (system(cmd) == 0)
+    {
+        // 若已挂载，检查是否挂到 /mnt/sdcard
+        snprintf(cmd, sizeof(cmd), "mount | grep '%s' | grep -q '/mnt/sdcard'", devpath);
+        if (system(cmd) == 0)
         {
-            if (system("mount | grep '/dev/mmcblk1p1' | grep -q '/mnt/sdcard'") == 0)
-            {
-                printf("设备已挂载到 /mnt/sdcard/。\n");
-                return;
-            }
-            else
-            {
-                printf("设备未挂载到 /mnt/sdcard/，正在处理...\n");
-                // 备份数据到当前挂载点
-                system("cp -r /mnt/sdcard/* $(mount | grep '/dev/mmcblk1p1' | awk '{print $3}')/");
-            }
+            printf("设备已挂载到 /mnt/sdcard/。\n");
+            return;
         }
         else
         {
-            printf("设备未挂载，正在创建临时目录并挂载...\n");
-            // 创建临时挂载点
-            system("mkdir -p /tmp/sdcard_temp");
-            // 将SD卡挂载到临时目录
-            system("mount /dev/mmcblk1p1 /tmp/sdcard_temp");
-            // 备份数据到临时目录
-            system("cp -r /mnt/sdcard/* /tmp/sdcard_temp/");
+            printf("设备未挂载到 /mnt/sdcard/，正在处理...\n");
+            // 备份数据到当前挂载点（取该设备的挂载点）
+            snprintf(cmd, sizeof(cmd), "cp -r /mnt/sdcard/* $(mount | grep '%s' | awk '{print $3}')/", devpath);
+            system(cmd);
         }
-        // 卸载SD卡
-        system("umount /dev/mmcblk1p1");
-        // 清空/mnt/sdcard/目录下的内容
-        system("rm -rf /mnt/sdcard/*"); 
-
-        // 将SD卡挂载到/mnt/sdcard/
-        system("mount /dev/mmcblk1p1 /mnt/sdcard/");
-  
-        printf("SD卡已挂载到 /mnt/sdcard/ 并且原始数据已保留。\n");
     }
     else
     {
-        printf("/dev/mmcblk1p1 设备不存在。\n");
+        printf("设备未挂载，正在创建临时目录并挂载...\n");
+        // 创建临时挂载点
+        system("mkdir -p /tmp/sdcard_temp");
+        // 将SD卡挂载到临时目录
+        snprintf(cmd, sizeof(cmd), "mount %s /tmp/sdcard_temp", devpath);
+        system(cmd);
+        // 备份数据到临时目录
+        system("cp -r /mnt/sdcard/* /tmp/sdcard_temp/");
     }
+
+    // 卸载设备
+    snprintf(cmd, sizeof(cmd), "umount %s", devpath);
+    system(cmd);
+    // 清空/mnt/sdcard/目录下的内容
+    system("rm -rf /mnt/sdcard/*");
+    // 将设备挂载到 /mnt/sdcard/
+    snprintf(cmd, sizeof(cmd), "mount %s /mnt/sdcard/", devpath);
+    system(cmd);
+
+    printf("SD卡已挂载到 /mnt/sdcard/ 并且原始数据已保留。\n");
 }
 
 #pragma GCC diagnostic pop

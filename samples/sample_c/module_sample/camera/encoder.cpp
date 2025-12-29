@@ -428,10 +428,10 @@ void Encoder::draw_en_osd(char *ptr, int DW_per_line)
     fill_one_char(ptr, (unsigned char (*)[32])分计数, 3 * 32 + count * 16, DW_per_line, 6); // UVPT:0%
     ptr += DW_per_line * 1024;                                                              // 下一行
 
-    fill_string(ptr, "dist", 0, DW_per_line);       // DIST
-    fill_one_char(ptr, &距离[8], 64, DW_per_line);  // DIST:
-    fill_float_string(ptr, 0, 3 * 32, DW_per_line); // DIST: 0.0
-    ptr += DW_per_line * 1024;
+    // fill_string(ptr, "dist", 0, DW_per_line);       // DIST
+    // fill_one_char(ptr, &距离[8], 64, DW_per_line);  // DIST:
+    // fill_float_string(ptr, 0, 3 * 32, DW_per_line); // DIST: 0.0
+    // ptr += DW_per_line * 1024;
 
     // fill_string(ptr, "flaw", 0, DW_per_line);      // FLAW
     // fill_one_char(ptr, &缺陷[8], 64, DW_per_line); // FLAW:
@@ -567,13 +567,13 @@ void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
         fill_one_char(ptr, (unsigned char (*)[32]) & 计数[i * 4][0], i * 32, DW_per_line);
     }
 
-    count = fill_int_string(ptr, 0, i * 32, DW_per_line);
-    fill_one_char(ptr, (unsigned char (*)[32])分计数, i * 32 + count * 16, DW_per_line, 6);
-    ptr += DW_per_line * 1024;
-    for (i = 0; i < 3; i++)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 距离[i * 4][0], i * 32, DW_per_line);
-    }
+    // count = fill_int_string(ptr, 0, i * 32, DW_per_line);
+    // fill_one_char(ptr, (unsigned char (*)[32])分计数, i * 32 + count * 16, DW_per_line, 6);
+    // ptr += DW_per_line * 1024;
+    // for (i = 0; i < 3; i++)
+    // {
+    //     fill_one_char(ptr, (unsigned char (*)[32]) & 距离[i * 4][0], i * 32, DW_per_line);
+    // }
 
     // 缺陷类型
     //  fill_float_string(ptr, 0, 3 * 32, DW_per_line);
@@ -1353,7 +1353,7 @@ void *encode_output_thread(void *arg)
         {
             encodec->m_record_state = record_idle;
             fclose(encodec->m_fp);
-            printf("停止录像\n");
+            USER_LOG_ERROR("停止录像\n");
             pthread_cond_signal(&encodec->transcode_cond);
         }
         pthread_mutex_unlock(&encodec->packet_lock);

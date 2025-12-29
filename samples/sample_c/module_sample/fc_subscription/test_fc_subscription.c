@@ -2,7 +2,7 @@
  ********************************************************************
  * @file    test_fc_subscription.c
  * @brief
- *
+ * killall /usr/local/bin/dj
  * @copyright (c) 2021 DJI. All rights reserved.
  *
  * All information contained herein is, and remains, the property of DJI.
@@ -385,7 +385,7 @@ static T_DjiReturnCode GimbalCallback(const uint8_t *data, uint16_t dataSize,
     if(lastGimbalAngles.x!=gimbalAngles->x)
     {
         //获取当前sbgc云台角度
-        // SBGC32_GetAngles(&SBGC32_Device, &GetAngles);
+        SBGC32_GetAngles(&SBGC32_Device, &GetAngles);
 
         pitch_speed = (gimbalAngles->x - lastGimbalAngles.x)/0.02;//50Hz
         lastGimbalAngles.x = gimbalAngles->x;
