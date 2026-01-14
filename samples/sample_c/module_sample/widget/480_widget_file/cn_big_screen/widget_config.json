@@ -479,7 +479,7 @@
       {
         "widget_index": 0,
         "widget_type": "list",
-        "widget_name": "光子颜色列表",
+        "widget_name": "颜色选择",
         "list_item": [
           {
             "item_name": "白色",
@@ -623,6 +623,33 @@
         "widget_type": "int_input_box",
         "widget_name": "缩放校正",
         "int_input_box_hint": "单位:0.1"
+      },
+      {
+        "widget_index": 7,
+        "widget_type": "button",
+        "widget_name": "航线拍照",
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 7
+        }
+      },
+      {
+        "widget_index": 8,
+        "widget_type": "button",
+        "widget_name": "航线录像开始",
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 8
+        }
+      },
+      {
+        "widget_index": 9,
+        "widget_type": "button",
+        "widget_name": "航线录像停止",
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 9
+        }
       }
     ]
   }

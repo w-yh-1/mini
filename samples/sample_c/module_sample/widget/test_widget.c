@@ -57,9 +57,10 @@ static const T_DjiWidgetHandlerListItem s_widgetHandlerList[] = {
     {3, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {4, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
     {5, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}
-};
-
+    {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {7, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {8, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {9, DJI_WIDGET_TYPE_BUTTON, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL}};
 
 static const char *s_widgetTypeNameArray[] = {
     "Unknown",
@@ -110,7 +111,7 @@ T_DjiReturnCode DjiTest_WidgetStartService(void)
     }
     USER_LOG_INFO("widget ui config path: %s", tempPath);
 
-    //set default ui config path
+    // set default ui config path
     USER_LOG_INFO("widget file: %s", tempPath);
     djiStat = DjiWidget_RegDefaultUiConfigByDirPath(tempPath);
     if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
@@ -179,6 +180,10 @@ T_DjiReturnCode DjiTest_WidgetStartService(void)
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
+    //设置默认UV_color
+    set_uv_color(1);
+    s_widgetValueList[0] = 0;  // set color default value
+
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
 
@@ -211,8 +216,8 @@ static void *DjiTest_WidgetTask(void *arg)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     USER_UTIL_UNUSED(arg);
-    s_widgetValueList[0] = 1; //set color default value
-    s_widgetValueList[1]=50; //set gain default value
+    s_widgetValueList[0] = 1;  // set color default value
+    s_widgetValueList[1] = 50; // set gain default value
     while (1)
     {
         djiStat = osalHandler->GetTimeMs(&sysTimeMs);
@@ -236,7 +241,6 @@ static void *DjiTest_WidgetTask(void *arg)
         {
             USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
         }
-
         osalHandler->TaskSleepMs(1000);
     }
 }
@@ -256,23 +260,23 @@ extern int camera_correction_factor_save();
 static T_DjiReturnCode DjiTestWidget_SetWidgetValue(E_DjiWidgetType widgetType, uint32_t index, int32_t value,
                                                     void *userData)
 {
-USER_UTIL_UNUSED(userData);
+    USER_UTIL_UNUSED(userData);
     USER_LOG_INFO("Set widget value, widgetType = %s, widgetIndex = %d ,widgetValue = %d",
                   s_widgetTypeNameArray[widgetType], index, value);
     switch (index)
     {
     case 0:
-        if(value!=s_widgetValueList[index])
+        if (value != s_widgetValueList[index])
         {
             USER_LOG_INFO("set_uv_color=%u\n", value);
-            set_uv_color(value+1);
+            set_uv_color(value + 1);
         }
         break;
     case 1:
-        if(value!=s_widgetValueList[index])
+        if (value != s_widgetValueList[index])
         {
-            USER_LOG_INFO("set_uv_gain=%u\n", value);
-            set_uv_gain((float)value/3.3+45);
+            USER_LOG_INFO("set_uv_gain(raw)=%u\n", value);
+            set_uv_gain_raw(value);
         }
         break;
     case 2:
@@ -290,8 +294,23 @@ USER_UTIL_UNUSED(userData);
     case 6:
         camera_set_scale_factor((float)value / 10.0f);
         break;
+    case 7:
+        if (value == 1)
+            take_snapshot_auto();
+        break;
+    case 8:
+        if (value == 1)
+            start_recording();
+        break;
+    case 9:
+        if (value == 1)
+            stop_recording();
+        break;
+    default:
+        break;
     }
-    if(index>=2&&index<=6)
+
+    if (index >= 2 && index <= 6)
     {
         camera_correction_factor_save();
     }
@@ -307,9 +326,6 @@ static T_DjiReturnCode DjiTestWidget_GetWidgetValue(E_DjiWidgetType widgetType, 
     USER_UTIL_UNUSED(widgetType);
     switch (index)
     {
-    // case 0:
-    //     s_widgetValueList[3] = get_uv_gain();
-    //     break;
     default:
         break;
     }

@@ -56,6 +56,7 @@
 #include "data_transmission/test_data_transmission.h"
 #include "dji_sdk_config.h"
 
+
 /* Private constants ---------------------------------------------------------*/
 #define DJI_LOG_PATH "Logs/DJI"
 #define DJI_LOG_INDEX_FILE_NAME "Logs/index"
@@ -815,7 +816,7 @@ static T_DjiReturnCode DjiUser_LocalWriteFsInit(const char *path)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-noreturn"
 #pragma GCC diagnostic ignored "-Wreturn-type"
-
+extern void language_switch(bool use_cn);
 static void *DjiUser_MonitorTask(void *argument)
 {
     unsigned int i = 0;
@@ -826,8 +827,29 @@ static void *DjiUser_MonitorTask(void *argument)
 
     USER_UTIL_UNUSED(argument);
 
+    // 跟踪 App 语言变化，用于自动切换 OSD 语言
+    static E_DjiMobileAppLanguage last_app_lang = DJI_MOBILE_APP_LANGUAGE_UNKNOWN;
+
     while (1)
     {
+        // 1) 轮询 App 语言，如变化则同步 OSD 语言
+        T_DjiMobileAppInfo mobileAppInfo;
+        if (DjiAircraftInfo_GetMobileAppInfo(&mobileAppInfo) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
+            if (mobileAppInfo.appLanguage != last_app_lang &&
+                mobileAppInfo.appLanguage != DJI_MOBILE_APP_LANGUAGE_UNKNOWN)
+            {
+                bool use_cn = (mobileAppInfo.appLanguage == DJI_MOBILE_APP_LANGUAGE_CHINESE);
+                language_switch(use_cn);
+                last_app_lang = mobileAppInfo.appLanguage;
+                USER_LOG_INFO("App language changed, OSD switched to %s\n", use_cn ? "Chinese" : "English");
+            }
+        }
+        else
+        {
+            USER_LOG_DEBUG("get mobile app information error (monitor loop)");
+        }
+
         threadCount = Monitor_GetThreadCountOfProcess(getpid());
         tidList = osalHandler->Malloc(threadCount * sizeof(pid_t));
         if (tidList == NULL)

@@ -83,6 +83,8 @@ public:
     void set_scale_factor(float v); float get_scale_factor() const;
     // zoom ratio
     void set_zoom_ratio(float v); float get_zoom_ratio() const;
+    // 统一 OSD 语言切换（内部同时作用录像与拍照）
+    void apply_language(bool use_cn);
     im_rect mUvSrcRect = {160, 90, 960, 540};
     im_rect mUvDstRect = {0, 0, 0, 0};
     im_rect mVlSrcRect = {0, 0, 0, 0};
@@ -110,12 +112,15 @@ extern "C"
     int resume_cam_stream();
     int set_uv_color(uint value);
     int set_uv_gain(uint value);
+    int set_uv_gain_raw(uint value);
     // C 接口：触发拍照
     int take_snapshot(const char* path);
     // C 接口：自动命名触发拍照
     int take_snapshot_auto();
     int start_recording();
     void stop_recording();
+    // 统一语言切换：录像 OSD + 拍照 OSD
+    void language_switch(bool use_cn);
     // C 接口：单项矫正参数 set/get 封装
     int camera_set_horz_dist_correction(int v);
     int camera_get_horz_dist_correction();
@@ -131,9 +136,6 @@ extern "C"
     bool camera_correction_factor_load();
     void camera_set_zoom_ratio(float v);
     float camera_get_zoom_ratio();
-    // 切换快照 OSD 语言（true=中文，false=英文）
-    void camera_set_snapshot_osd_chinese(bool use_cn);
-    bool camera_get_snapshot_osd_chinese();
 }
 
 camera_process::camera_process(/* args */)

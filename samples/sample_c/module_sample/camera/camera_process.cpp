@@ -17,6 +17,7 @@
 #include <sys/eventfd.h>
 #include <poll.h>
 #include "dji_camera_manager.h"
+#include "dji_aircraft_info.h"
 #include "free_type_osd.h"
 
 #define CORRECTION_FACTOR_CONFIG_FILE "/usr/local/bin/correction.json"
@@ -36,9 +37,13 @@ static IM_STATUS rga_imcolorkey(const rga_buffer_t src,
 static uv_async_t *uv_ctx = NULL;
 static uint32_t uv_photons = 0;
 static uint32_t uv_gain = 0;
+// 用户设置的原始增益值（未换算），用于 OSD 显示
+static std::atomic_uint32_t uv_gain_display_raw{0};
 // FreeType OSD instance (used for snapshot overlay)
 static FreeTypeOSD g_ftosd;
 static bool g_ftosd_inited = false;
+// OSD 语言开关：false=英文，true=中文（同时作用于录像 OSD 与快照 OSD）
+static std::atomic_bool g_osd_use_chinese{false};
 static void uv_cb_func(int et, int status, uint32_t value, void *user);
 static bool init_UV_async(uv_async_t **uv_ctx);
 static bool deinit_UV_async(uv_async_t *uv_ctx);
@@ -112,15 +117,32 @@ void *camera_process::snapshot_worker(void *arg)
                     struct tm tmv;
                     localtime_r(&now, &tmv);
                     strftime(tb, sizeof(tb), "%Y-%m-%d %H:%M:%S", &tmv);
+                    const bool use_cn = g_osd_use_chinese.load(std::memory_order_acquire);
+                    char s0[128];
                     char s1[128];
                     char s2[64];
-                    snprintf(s1, sizeof(s1), "Time: %s", tb);
-                    snprintf(s2, sizeof(s2), "Gain: %u  Photons: %u", (unsigned)uv_gain, (unsigned)uv_photons);
+            
+                    uint32_t gain_show = uv_gain_display_raw.load(std::memory_order_acquire);
+                    if (use_cn)
+                    {
+                        snprintf(s0, sizeof(s0), "紫红光电");
+                        snprintf(s1, sizeof(s1), "时间: %s", tb);
+                        snprintf(s2, sizeof(s2), "增益: %u  光子数: %u", gain_show, (unsigned)uv_photons);
+                    }
+                    else
+                    {
+                        snprintf(s0, sizeof(s0), "UVIRSYS");
+                        snprintf(s1, sizeof(s1), "Time: %s", tb);
+                        snprintf(s2, sizeof(s2), "Gain: %u  Photons: %u", gain_show, (unsigned)uv_photons);
+                    }
                     // 基线位置：左上角，留 10px 边距
                     int px = 10;
                     int py = 10 + 20; // baseline y，字体大小约24，取20作为近似
-                    g_ftosd.render_text(s1, base, width, height, stride_bytes, px, py, 255, 255, 255);
+                    g_ftosd.render_text(s0, base, width, height, stride_bytes, px, py, 255, 255, 255);
                     // 第二行
+                    py += 24 + 4;
+                    g_ftosd.render_text(s1, base, width, height, stride_bytes, px, py, 255, 255, 255);
+                    //第三行
                     py += 24 + 4;
                     g_ftosd.render_text(s2, base, width, height, stride_bytes, px, py, 255, 255, 255);
                 }
@@ -286,7 +308,7 @@ void *camera_process::camera_task(void *arg)
             // enc_buf解锁
         }
         processor->mEncoder->modify_osd_count_data(&processor->mEncoder->osd_data, uv_photons, false);
-        processor->mEncoder->modify_osd_gain_data(&processor->mEncoder->osd_data, uv_gain);
+        processor->mEncoder->modify_osd_gain_data(&processor->mEncoder->osd_data, uv_gain_display_raw.load(std::memory_order_acquire));
         processor->update_rects(0);
     }
     return NULL;
@@ -330,6 +352,22 @@ bool camera_process::init(pOutput_func output_func)
         return false;
     }
 
+    // 使录像 OSD 语言与全局开关保持一致（避免服务启动前已切换语言）
+    apply_language(g_osd_use_chinese.load(std::memory_order_acquire));
+
+    // 尝试从移动端语言自动同步 OSD 语言
+    T_DjiMobileAppInfo mobileAppInfo;
+    if (DjiAircraftInfo_GetMobileAppInfo(&mobileAppInfo) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
+        USER_LOG_ERROR("get mobile app information error. keep previous OSD language");
+    }
+    else
+    {
+        bool app_cn = (mobileAppInfo.appLanguage == DJI_MOBILE_APP_LANGUAGE_CHINESE);
+        apply_language(app_cn);
+        USER_LOG_INFO("OSD language auto-set from app: %s\n", app_cn ? "Chinese" : "English");
+    }
+
     ret = init_UV_async(&uv_ctx);
     if (!ret)
     {
@@ -362,7 +400,7 @@ bool camera_process::init(pOutput_func output_func)
         }
     }
 
-    set_uv_gain(60); //默认值
+    set_uv_gain_raw(60); // 默认值（显示与用户一致）
 
     load_correction_factors(CORRECTION_FACTOR_CONFIG_FILE);
 
@@ -533,6 +571,17 @@ float camera_process::get_scale_factor() const { return scaleFactor; }
 
 void camera_process::set_zoom_ratio(float v) { zoom_ratio = v; }
 float camera_process::get_zoom_ratio() const { return zoom_ratio; }
+
+void camera_process::apply_language(bool use_cn)
+{
+    // 快照 OSD 标志
+    g_osd_use_chinese.store(use_cn, std::memory_order_release);
+    // 录像 OSD 切换
+    if (mEncoder)
+    {
+        Encoder::switch_language(&mEncoder->osd_data, use_cn);
+    }
+}
 
 IM_STATUS rga_improcess(rga_buffer_t &src, rga_buffer_t &dst, im_rect sRect, im_rect dRect, int usage)
 {
@@ -755,7 +804,7 @@ static int save_image_as_png(const char *filename, const uint8_t *image_data, in
     localtime_r(&now, &tmv);
     strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S %z", &tmv);
     char gainbuf[32];
-    snprintf(gainbuf, sizeof(gainbuf), "%u", (unsigned)uv_gain);
+    snprintf(gainbuf, sizeof(gainbuf), "%u", (unsigned)uv_gain_display_raw.load(std::memory_order_acquire));
     char photonsbuf[32];
     snprintf(photonsbuf, sizeof(photonsbuf), "%u", (unsigned)uv_photons);
 
@@ -883,7 +932,7 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
     localtime_r(&now, &tmv);
     strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S %z", &tmv);
     char gainbuf[64];
-    snprintf(gainbuf, sizeof(gainbuf), "%u", (unsigned)uv_gain);
+    snprintf(gainbuf, sizeof(gainbuf), "%u", (unsigned)uv_gain_display_raw.load(std::memory_order_acquire));
     char photonsbuf[64];
     snprintf(photonsbuf, sizeof(photonsbuf), "%u", (unsigned)uv_photons);
 
@@ -946,6 +995,14 @@ int set_uv_color(uint value)
 
 int set_uv_gain(uint value)
 {
+    // value 为换算后的实际硬件增益，尝试反推用户值以便显示一致
+    // 反算公式近似 raw = (value - 45) * 3.3
+    if (value >= 45)
+    {
+        uint32_t raw = (uint32_t)((value - 45) * 3.3f + 0.5f);
+        uv_gain_display_raw.store(raw, std::memory_order_release);
+    }
+
     int rc = uv_async_set_high_voltage_gain(uv_ctx, (uint16_t)value);
     if (rc != UV_OK)
     {
@@ -953,6 +1010,35 @@ int set_uv_gain(uint value)
         return -1;
     }
     return 0;
+}
+    
+// 新接口：传入未换算的用户设置值，内部完成换算并用于 OSD 显示
+int set_uv_gain_raw(uint value)
+{
+    uv_gain_display_raw.store(value, std::memory_order_release);
+    uint16_t hw = (uint16_t)((float)value / 3.3f + 45.0f + 0.5f);
+    int rc = uv_async_set_high_voltage_gain(uv_ctx, hw);
+    if (rc != UV_OK)
+    {
+        USER_LOG_ERROR("uv_async_set_uv_gain failed: %d\n", rc);
+        return -1;
+    }
+    return 0;
+}
+
+// 统一语言切换：录像 OSD + 拍照 OSD
+void language_switch(bool use_cn)
+{
+    if (processor)
+    {
+        processor->apply_language(use_cn);
+    }
+    else
+    {
+        // 服务未启动时仍更新全局标志，确保启动后快照 OSD 生效
+        g_osd_use_chinese.store(use_cn, std::memory_order_release);
+    }
+    USER_LOG_INFO("OSD language switched to %s\n", use_cn ? "Chinese" : "English");
 }
 
 // C 包装：触发拍照

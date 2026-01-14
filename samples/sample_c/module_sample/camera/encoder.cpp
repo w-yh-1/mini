@@ -409,7 +409,7 @@ static unsigned int fill_float_string(char *dst, unsigned int value, unsigned in
 void Encoder::draw_en_osd(char *ptr, int DW_per_line)
 {
     int i, count;
-    // fill_string(ptr, "uvirsys{", 0, DW_per_line);
+    fill_string(ptr, "uvirsys", 0, DW_per_line);
     ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
 
     // fill_string(ptr, "mode", 0, DW_per_line);      // MODE
@@ -539,10 +539,10 @@ void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
     int i;
     int count;
     int gain = 0;
-    // for (i = 0; i < 4; i++) // i<字符串长度
-    // {
-    //     fill_one_char(ptr, (unsigned char(*)[32]) & 紫红光电[i * 4][0], i * 32, DW_per_line);
-    // }
+    for (i = 0; i < 4; i++) // i<字符串长度
+    {
+        fill_one_char(ptr, (unsigned char(*)[32]) & 紫红光电[i * 4][0], i * 32, DW_per_line);
+    }
     ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
     // for (i = 0; i < 3; i++)
     // {
@@ -770,7 +770,8 @@ Encoder::Encoder(RK_U32 width, RK_U32 height, MppFrameFormat frame_fmt, MppCodin
     args.height = height;
     args.fmt = frame_fmt;
     args.hor_stride = mpi_enc_width_default_stride(width, args.fmt);
-    args.ver_stride = MPP_ALIGN(height, 16);
+    // ver_stride 使用实际高度，避免 UV 偏移错误导致底部发绿；缓冲区大小仍按 64 对齐分配
+    args.ver_stride = height;
     args.rc_mode = rc_mode;
     args.type = type;
     args.frame_size = calc_buf_size(frame_fmt);

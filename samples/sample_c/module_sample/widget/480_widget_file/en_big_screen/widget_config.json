@@ -623,6 +623,33 @@
         "widget_type": "int_input_box",
         "widget_name": "scale factor correction",
         "int_input_box_hint": "unit:0.1"
+      },
+      {
+        "widget_index": 7,
+        "widget_type": "button",
+        "widget_name": "Air Route Shot",
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 7
+        }
+      },
+      {
+        "widget_index": 8,
+        "widget_type": "button",
+        "widget_name": "Air Route Record Start",
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 8
+        }
+      },
+      {
+        "widget_index": 9,
+        "widget_type": "button",
+        "widget_name": "Air Route Record Stop",
+        "customize_rc_buttons_config": {
+          "is_enable": true,
+          "mapping_config_display_order": 9
+        }
       }
     ]
   }
