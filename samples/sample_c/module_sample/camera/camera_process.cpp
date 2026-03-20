@@ -58,7 +58,6 @@ static inline void eventfd_notify(int efd)
     uint64_t one = 1;
     ssize_t n = write(efd, &one, sizeof(one));
     // (void)n;
-
 }
 static inline void eventfd_drain(int efd)
 {
@@ -121,7 +120,7 @@ void *camera_process::snapshot_worker(void *arg)
                     char s0[128];
                     char s1[128];
                     char s2[64];
-            
+
                     uint32_t gain_show = uv_gain_display_raw.load(std::memory_order_acquire);
                     if (use_cn)
                     {
@@ -142,7 +141,7 @@ void *camera_process::snapshot_worker(void *arg)
                     // 第二行
                     py += 24 + 4;
                     g_ftosd.render_text(s1, base, width, height, stride_bytes, px, py, 255, 255, 255);
-                    //第三行
+                    // 第三行
                     py += 24 + 4;
                     g_ftosd.render_text(s2, base, width, height, stride_bytes, px, py, 255, 255, 255);
                 }
@@ -208,6 +207,7 @@ void *camera_process::camera_task(void *arg)
     camera_process *processor = (camera_process *)arg;
     int frame_id;
     int uv_frame_id;
+    int level = 0;
     rga_buffer_t *uv_buf = NULL;
     rga_buffer_t *enc_buf = NULL;
     im_colorkey_range white_range;
@@ -219,6 +219,11 @@ void *camera_process::camera_task(void *arg)
 
     // Add your camera processing logic here
     // processor->mEncoder->start_record("/mnt/sdcard/record.h264");
+    while (processor->mEncoder->modify_osd_flaw_info == NULL)
+    {
+        usleep(100000);
+        USER_LOG_INFO("waiting for encoder ready...");
+    }
     DELAY_INIT;
     for (;;)
     {
@@ -307,7 +312,11 @@ void *camera_process::camera_task(void *arg)
             }
             // enc_buf解锁
         }
-        processor->mEncoder->modify_osd_count_data(&processor->mEncoder->osd_data, uv_photons, false);
+        level = (uv_photons > 8000) ? 3 : 
+                (uv_photons > 1000) ? 2 : 
+                (uv_photons > 200)  ? 1: 0;
+        processor->mEncoder->modify_osd_flaw_info(&processor->mEncoder->osd_data, level);
+        processor->mEncoder->modify_osd_count_data(&processor->mEncoder->osd_data, uv_photons, true);
         processor->mEncoder->modify_osd_gain_data(&processor->mEncoder->osd_data, uv_gain_display_raw.load(std::memory_order_acquire));
         processor->update_rects(0);
     }
@@ -379,8 +388,7 @@ bool camera_process::init(pOutput_func output_func)
     const char *font_dir = "/usr/share/fonts/source-han-sans-cn";
     const char *font_candidates[] = {
         "SourceHanSansCN-Regular.otf",
-        NULL
-    };
+        NULL};
     char font_path[512] = {0};
     for (int i = 0; font_candidates[i] != NULL; ++i)
     {
@@ -462,11 +470,9 @@ void camera_process::update_rects(int distance)
     last_distance = distance;
     last_zoom_ratio = zoom_ratio;
     // 计算偏移
-    int x_offset = distance > 0 ? 
-                    zoom_ratio * (horzDistCorrectionFactor / distance + horzAngCorrectionFactor) : zoom_ratio * horzAngCorrectionFactor;
-    int y_offset = distance > 0 ? 
-                    zoom_ratio * (vertDistCorrectionFactor / distance + vertAngCorrectionFactor) : zoom_ratio * vertAngCorrectionFactor;
-     
+    int x_offset = distance > 0 ? zoom_ratio * (horzDistCorrectionFactor / distance + horzAngCorrectionFactor) : zoom_ratio * horzAngCorrectionFactor;
+    int y_offset = distance > 0 ? zoom_ratio * (vertDistCorrectionFactor / distance + vertAngCorrectionFactor) : zoom_ratio * vertAngCorrectionFactor;
+
     // 理想目标区域
     int temp_dst_width = 1920 * scaleFactor * zoom_ratio;
     int temp_dst_height = 1080 * scaleFactor * zoom_ratio;
@@ -479,11 +485,10 @@ void camera_process::update_rects(int distance)
     mUvDstRect.width = std::min(1920, temp_dst_width + temp_dst_x) - mUvDstRect.x;
     mUvDstRect.height = std::min(1080, temp_dst_height + temp_dst_y) - mUvDstRect.y;
 
-    mUvSrcRect.x = temp_dst_x < 0 ? 1280*(-temp_dst_x) / temp_dst_width : 0;
-    mUvSrcRect.y = temp_dst_y < 0 ? 720 * (-temp_dst_y) / temp_dst_height  : 0;
+    mUvSrcRect.x = temp_dst_x < 0 ? 1280 * (-temp_dst_x) / temp_dst_width : 0;
+    mUvSrcRect.y = temp_dst_y < 0 ? 720 * (-temp_dst_y) / temp_dst_height : 0;
     mUvSrcRect.width = 1280 * mUvDstRect.width / temp_dst_width;
     mUvSrcRect.height = 720 * mUvDstRect.height / temp_dst_height;
-
 
     mVlSrcRect.width = 3840 / zoom_ratio;
     mVlSrcRect.x = (3840 - mVlSrcRect.width) / 2;
@@ -753,11 +758,13 @@ static int save_image_as_png(const char *filename, const uint8_t *image_data, in
     }
 
     // libpng 错误/警告处理（便于定位问题）
-    auto png_error_fn = [](png_structp png_ptr, png_const_charp msg) {
+    auto png_error_fn = [](png_structp png_ptr, png_const_charp msg)
+    {
         USER_LOG_ERROR("[libpng] error: %s\n", msg);
         longjmp(png_jmpbuf(png_ptr), 1);
     };
-    auto png_warn_fn = [](png_structp, png_const_charp msg) {
+    auto png_warn_fn = [](png_structp, png_const_charp msg)
+    {
         USER_LOG_ERROR("[libpng] warn: %s\n", msg);
     };
 
@@ -882,11 +889,13 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
     }
 
     // libpng 错误/警告处理（便于定位问题）
-    auto png_error_fn = [](png_structp png_ptr, png_const_charp msg) {
+    auto png_error_fn = [](png_structp png_ptr, png_const_charp msg)
+    {
         USER_LOG_ERROR("[libpng] error: %s\n", msg);
         longjmp(png_jmpbuf(png_ptr), 1);
     };
-    auto png_warn_fn = [](png_structp, png_const_charp msg) {
+    auto png_warn_fn = [](png_structp, png_const_charp msg)
+    {
         USER_LOG_ERROR("[libpng] warn: %s\n", msg);
     };
 
@@ -1011,7 +1020,7 @@ int set_uv_gain(uint value)
     }
     return 0;
 }
-    
+
 // 新接口：传入未换算的用户设置值，内部完成换算并用于 OSD 显示
 int set_uv_gain_raw(uint value)
 {

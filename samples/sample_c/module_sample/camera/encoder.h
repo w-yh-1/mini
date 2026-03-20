@@ -7,6 +7,7 @@
 #include "camera_source.h"
 #include "dji_logger.h"
 #include <pthread.h>
+#include <vector>
 #define CODEC_TYPE MPP_VIDEO_CodingAVC
 #define MPP_ALIGN(x, a) (((x) + (a) - 1) & ~((a) - 1))
 #define mpp_env_get_u32(name, value, default_value) os_get_env_u32(name, value, default_value)
@@ -123,6 +124,9 @@ private:
     pthread_cond_t packet_cond = PTHREAD_COND_INITIALIZER;
     pthread_cond_t transcode_cond = PTHREAD_COND_INITIALIZER;
     record_state m_record_state;
+    std::vector<uint8_t> m_last_vps;
+    std::vector<uint8_t> m_last_sps;
+    std::vector<uint8_t> m_last_pps;
 
     //function
     size_t calc_buf_size(MppFrameFormat fmt);
@@ -153,16 +157,17 @@ public:
     MppEncOSDData osd_data;
     rga_buffer_t *input_buf;
     static bool isCN;
+    
     static MPP_RET gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group);
     static void switch_language(MppEncOSDData *osd_data, bool is_CN);
-    static void modify_osd_cn_mode(MppEncOSDData *osd_data, unsigned int mode);
-    static void modify_osd_en_mode(MppEncOSDData *osd_data, unsigned int mode);
+    static void modify_osd_en_flaw_info(MppEncOSDData *osd_data, int level);
+    static void modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level);
     static void modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value);
     static void modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value, bool period);
-    static void modify_osd_distance_data(MppEncOSDData *osd_data, unsigned int value);
     static void draw_cn_osd(char *ptr, int DW_per_line = 8);
     static void draw_en_osd(char *ptr, int DW_per_line = 8);
     static void draw_time_osd(MppEncOSDData *osd_data);
+    static void (*modify_osd_flaw_info)(MppEncOSDData *osd_data, int level);
 };
 
 #endif

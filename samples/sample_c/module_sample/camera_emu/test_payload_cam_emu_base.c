@@ -36,39 +36,40 @@
 #include <widget_interaction_test/test_widget_interaction.h>
 
 /* Private constants ---------------------------------------------------------*/
-#define PAYLOAD_CAMERA_EMU_TASK_FREQ            (100)
-#define PAYLOAD_CAMERA_EMU_TASK_STACK_SIZE      (2048)
-#define SDCARD_TOTAL_SPACE_IN_MB                (32 * 1024)
-#define SDCARD_PER_PHOTO_SPACE_IN_MB            (4)
-#define SDCARD_PER_SECONDS_RECORD_SPACE_IN_MB   (2)
+#define PAYLOAD_CAMERA_EMU_TASK_FREQ (100)
+#define PAYLOAD_CAMERA_EMU_TASK_STACK_SIZE (2048)
+#define SDCARD_TOTAL_SPACE_IN_MB (32 * 1024)
+#define SDCARD_PER_PHOTO_SPACE_IN_MB (4)
+#define SDCARD_PER_SECONDS_RECORD_SPACE_IN_MB (2)
 // #define ZOOM_OPTICAL_FOCAL_MAX_LENGTH           (300)
-#define ZOOM_OPTICAL_FOCAL_MAX_LENGTH           (10)
-#define ZOOM_OPTICAL_FOCAL_MIN_LENGTH           (10)
-#define ZOOM_OPTICAL_FOCAL_LENGTH_STEP          (10)
-#define ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP     (5)
-#define ZOOM_DIGITAL_BASE_FACTOR                (1.0)
-#define ZOOM_DIGITAL_STEP_FACTOR                (1.0)
-#define ZOOM_DIGITAL_MAX_FACTOR                 (4.0)
-#define FOCUS_MAX_RINGVALUE                     (1000)
-#define FOCUS_MID_RINGVALUE                     (500)
-#define IMAGE_SENSOR_X_SIZE                     (88.0f) // unit: 0.1mm
-#define IMAGE_SENSOR_Y_SIZE                     (66.0f) // unit: 0.1mm
-#define CENTER_POINT_IN_SCREEN_X_VALUE          (0.5f)
-#define CENTER_POINT_IN_SCREEN_Y_VALUE          (0.5f)
-#define TAP_ZOOM_DURATION                       (2000) // unit: ms
-#define INTERVAL_PHOTOGRAPH_ALWAYS_COUNT        (255)
-#define INTERVAL_PHOTOGRAPH_INTERVAL_INIT_VALUE (1)    // unit: s
-#define TAKING_PHOTO_SPENT_TIME_MS_EMU          (500)
-#define PHOTO_FILE_PATH                         "../../../../../api_sample/camera_media_emu/media_file/DJI_0001_ORG.jpg"
+#define ZOOM_OPTICAL_FOCAL_MAX_LENGTH (10)
+#define ZOOM_OPTICAL_FOCAL_MIN_LENGTH (10)
+#define ZOOM_OPTICAL_FOCAL_LENGTH_STEP (10)
+#define ZOOM_OPTICAL_FOCAL_LENGTH_CTRL_STEP (5)
+#define ZOOM_DIGITAL_BASE_FACTOR (1.0)
+#define ZOOM_DIGITAL_STEP_FACTOR (1.0)
+#define ZOOM_DIGITAL_MAX_FACTOR (4.0)
+#define FOCUS_MAX_RINGVALUE (1000)
+#define FOCUS_MID_RINGVALUE (500)
+#define IMAGE_SENSOR_X_SIZE (88.0f) // unit: 0.1mm
+#define IMAGE_SENSOR_Y_SIZE (66.0f) // unit: 0.1mm
+#define CENTER_POINT_IN_SCREEN_X_VALUE (0.5f)
+#define CENTER_POINT_IN_SCREEN_Y_VALUE (0.5f)
+#define TAP_ZOOM_DURATION (2000) // unit: ms
+#define INTERVAL_PHOTOGRAPH_ALWAYS_COUNT (255)
+#define INTERVAL_PHOTOGRAPH_INTERVAL_INIT_VALUE (1) // unit: s
+#define TAKING_PHOTO_SPENT_TIME_MS_EMU (500)
+#define PHOTO_FILE_PATH "../../../../../api_sample/camera_media_emu/media_file/DJI_0001_ORG.jpg"
 
 // Attention: you can select which camera function you want to run, default: all on.
-#define USER_CAMERA_EMU_METERING_ON                1
-#define USER_CAMERA_EMU_FOCUS_ON                   1
-#define USER_CAMERA_EMU_HYBRID_ZOOM_ON             1
-#define USER_CAMERA_EMU_TAP_ZOOM_ON                1
+#define USER_CAMERA_EMU_METERING_ON 1
+#define USER_CAMERA_EMU_FOCUS_ON 1
+#define USER_CAMERA_EMU_HYBRID_ZOOM_ON 1
+#define USER_CAMERA_EMU_TAP_ZOOM_ON 1
 
 /* Private types -------------------------------------------------------------*/
-typedef struct {
+typedef struct
+{
     E_DjiGimbalRotationMode rotationMode;
     T_DjiGimbalRotationProperty rotationProperty;
     T_DjiAttitude3d rotationValue;
@@ -182,7 +183,8 @@ static T_DjiReturnCode GetSystemState(T_DjiCameraSystemState *systemState)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -190,7 +192,8 @@ static T_DjiReturnCode GetSystemState(T_DjiCameraSystemState *systemState)
     *systemState = s_cameraState;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -204,20 +207,22 @@ static T_DjiReturnCode SetMode(E_DjiCameraMode mode)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
     static int temp = 1;
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
     if (mode == 2 && s_cameraState.cameraMode != 2)
-        pause_cam_stream();//停止图传
+        pause_cam_stream(); // 停止图传
     else if (mode != 2 && s_cameraState.cameraMode == 2)
-        resume_cam_stream();//开启图传
+        resume_cam_stream(); // 开启图传
     s_cameraState.cameraMode = mode;
     USER_LOG_INFO("set camera mode:%d", mode);
     DjiTest_WidgetLogAppend("set cam mode %d", mode);
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -232,12 +237,14 @@ static T_DjiReturnCode StartRecordVideo(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     djiStat = osalHandler->MutexLock(s_commonMutex);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", djiStat);
         return djiStat;
     }
 
-    if (s_cameraState.isRecording != false) {
+    if (s_cameraState.isRecording != false)
+    {
         USER_LOG_ERROR("camera is already in recording state");
         returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT_IN_CURRENT_STATE;
         goto out;
@@ -247,11 +254,11 @@ static T_DjiReturnCode StartRecordVideo(void)
     start_recording();
     USER_LOG_INFO("start record video");
     DjiTest_WidgetLogAppend("start record video");
-    
 
 out:
     djiStat = osalHandler->MutexUnlock(s_commonMutex);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", djiStat);
         return djiStat;
     }
@@ -267,12 +274,14 @@ static T_DjiReturnCode StopRecordVideo(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     djiStat = osalHandler->MutexLock(s_commonMutex);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", djiStat);
         return djiStat;
     }
 
-    if (s_cameraState.isRecording != true) {
+    if (s_cameraState.isRecording != true)
+    {
         USER_LOG_ERROR("camera is not in recording state");
         returnCode = DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT_IN_CURRENT_STATE;
         goto out;
@@ -286,7 +295,8 @@ static T_DjiReturnCode StopRecordVideo(void)
 
 out:
     djiStat = osalHandler->MutexUnlock(s_commonMutex);
-    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", djiStat);
         return djiStat;
     }
@@ -300,7 +310,8 @@ static T_DjiReturnCode StartShootPhoto(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -309,11 +320,16 @@ static T_DjiReturnCode StartShootPhoto(void)
     DjiTest_WidgetLogAppend("start shoot photo");
     s_cameraState.isStoring = true;
 
-    if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_SINGLE) {
+    if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_SINGLE)
+    {
         s_cameraState.shootingState = DJI_CAMERA_SHOOTING_SINGLE_PHOTO;
-    } else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_BURST) {
+    }
+    else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_BURST)
+    {
         s_cameraState.shootingState = DJI_CAMERA_SHOOTING_BURST_PHOTO;
-    } else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_INTERVAL) {
+    }
+    else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_INTERVAL)
+    {
         s_cameraState.shootingState = DJI_CAMERA_SHOOTING_INTERVAL_PHOTO;
         s_cameraState.isShootingIntervalStart = true;
         s_cameraState.currentPhotoShootingIntervalTimeInSeconds = s_cameraPhotoTimeIntervalSettings.timeIntervalSeconds;
@@ -321,7 +337,8 @@ static T_DjiReturnCode StartShootPhoto(void)
     }
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -335,7 +352,8 @@ static T_DjiReturnCode StopShootPhoto(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -347,7 +365,8 @@ static T_DjiReturnCode StopShootPhoto(void)
     s_cameraState.isShootingIntervalStart = false;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -361,7 +380,8 @@ static T_DjiReturnCode SetShootPhotoMode(E_DjiCameraShootPhotoMode mode)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -370,7 +390,8 @@ static T_DjiReturnCode SetShootPhotoMode(E_DjiCameraShootPhotoMode mode)
     USER_LOG_INFO("set shoot photo mode:%d", mode);
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -384,7 +405,8 @@ static T_DjiReturnCode GetShootPhotoMode(E_DjiCameraShootPhotoMode *mode)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -392,8 +414,9 @@ static T_DjiReturnCode GetShootPhotoMode(E_DjiCameraShootPhotoMode *mode)
     *mode = s_cameraShootPhotoMode;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);\
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
+        USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
 
@@ -406,7 +429,8 @@ static T_DjiReturnCode SetPhotoBurstCount(E_DjiCameraBurstCount burstCount)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -415,7 +439,8 @@ static T_DjiReturnCode SetPhotoBurstCount(E_DjiCameraBurstCount burstCount)
     USER_LOG_INFO("set photo burst count:%d", burstCount);
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -429,7 +454,8 @@ static T_DjiReturnCode GetPhotoBurstCount(E_DjiCameraBurstCount *burstCount)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -437,7 +463,8 @@ static T_DjiReturnCode GetPhotoBurstCount(E_DjiCameraBurstCount *burstCount)
     *burstCount = s_cameraBurstCount;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -451,7 +478,8 @@ static T_DjiReturnCode SetPhotoTimeIntervalSettings(T_DjiCameraPhotoTimeInterval
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -464,7 +492,8 @@ static T_DjiReturnCode SetPhotoTimeIntervalSettings(T_DjiCameraPhotoTimeInterval
     s_cameraState.currentPhotoShootingIntervalCount = settings.captureCount;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -478,7 +507,8 @@ static T_DjiReturnCode GetPhotoTimeIntervalSettings(T_DjiCameraPhotoTimeInterval
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -486,7 +516,8 @@ static T_DjiReturnCode GetPhotoTimeIntervalSettings(T_DjiCameraPhotoTimeInterval
     memcpy(settings, &s_cameraPhotoTimeIntervalSettings, sizeof(T_DjiCameraPhotoTimeIntervalSettings));
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -500,7 +531,8 @@ static T_DjiReturnCode GetSDCardState(T_DjiCameraSDCardState *sdCardState)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -508,7 +540,8 @@ static T_DjiReturnCode GetSDCardState(T_DjiCameraSDCardState *sdCardState)
     memcpy(sdCardState, &s_cameraSDCardState, sizeof(T_DjiCameraSDCardState));
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -522,7 +555,8 @@ static T_DjiReturnCode FormatSDCard(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -539,7 +573,8 @@ static T_DjiReturnCode FormatSDCard(void)
         SDCARD_TOTAL_SPACE_IN_MB / SDCARD_PER_SECONDS_RECORD_SPACE_IN_MB;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -650,7 +685,8 @@ static T_DjiReturnCode SetDigitalZoomFactor(dji_f32_t factor)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -659,7 +695,8 @@ static T_DjiReturnCode SetDigitalZoomFactor(dji_f32_t factor)
     s_cameraDigitalZoomFactor = factor;
     camera_set_zoom_ratio(factor);
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -673,7 +710,8 @@ static T_DjiReturnCode SetOpticalZoomFocalLength(uint32_t focalLength)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -685,7 +723,8 @@ static T_DjiReturnCode SetOpticalZoomFocalLength(uint32_t focalLength)
     camera_set_zoom_ratio(ZOOM_DIGITAL_BASE_FACTOR);
     USER_LOG_INFO("set digital zoom factor:%.2f", s_cameraDigitalZoomFactor);
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -699,7 +738,8 @@ static T_DjiReturnCode GetOpticalZoomFocalLength(uint32_t *focalLength)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -707,7 +747,8 @@ static T_DjiReturnCode GetOpticalZoomFocalLength(uint32_t *focalLength)
     *focalLength = s_cameraOpticalZoomFocalLength;
 
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -730,7 +771,8 @@ static T_DjiReturnCode StartContinuousOpticalZoom(E_DjiCameraZoomDirection direc
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -739,13 +781,31 @@ static T_DjiReturnCode StartContinuousOpticalZoom(E_DjiCameraZoomDirection direc
     s_isStartContinuousOpticalZoom = true;
     s_cameraZoomDirection = direction;
     s_cameraZoomSpeed = speed;
-
+    if(direction == DJI_CAMERA_ZOOM_DIRECTION_IN)
+    {
+        //数字变焦增加一步长
+        s_cameraDigitalZoomFactor += ZOOM_DIGITAL_STEP_FACTOR;
+        if(s_cameraDigitalZoomFactor > ZOOM_DIGITAL_MAX_FACTOR)
+        {
+            s_cameraDigitalZoomFactor = ZOOM_DIGITAL_MAX_FACTOR;
+        }
+    }
+    else
+    {
+        //数字变焦减少一步长
+        s_cameraDigitalZoomFactor -= ZOOM_DIGITAL_STEP_FACTOR;
+        if(s_cameraDigitalZoomFactor < ZOOM_DIGITAL_BASE_FACTOR)
+        {
+            s_cameraDigitalZoomFactor = ZOOM_DIGITAL_BASE_FACTOR;
+        }
+    }
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
-
+    camera_set_zoom_ratio(s_cameraDigitalZoomFactor);
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
 
@@ -755,7 +815,8 @@ static T_DjiReturnCode StopContinuousOpticalZoom(void)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -766,7 +827,8 @@ static T_DjiReturnCode StopContinuousOpticalZoom(void)
     s_cameraZoomSpeed = DJI_CAMERA_ZOOM_SPEED_NORMAL;
 
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -780,7 +842,8 @@ static T_DjiReturnCode GetTapZoomState(T_DjiCameraTapZoomState *state)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_tapZoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -788,7 +851,8 @@ static T_DjiReturnCode GetTapZoomState(T_DjiCameraTapZoomState *state)
     memcpy(state, &s_cameraTapZoomState, sizeof(T_DjiCameraTapZoomState));
 
     returnCode = osalHandler->MutexUnlock(s_tapZoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -837,12 +901,14 @@ static T_DjiReturnCode TapZoomAtTarget(T_DjiCameraPointInScreen target)
 
     USER_LOG_INFO("tap zoom at target: x %f, y %f.", target.focusX, target.focusY);
 
-    if (s_isTapZoomEnabled != true) {
+    if (s_isTapZoomEnabled != true)
+    {
         USER_LOG_WARN("tap zoom is not enabled.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_SYSTEM_ERROR;
     }
 
-    if (s_isTapZooming || s_isStartTapZoom) {
+    if (s_isTapZooming || s_isStartTapZoom)
+    {
         USER_LOG_WARN("The last tap zoom process is not over.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT_IN_CURRENT_STATE;
     }
@@ -851,7 +917,8 @@ static T_DjiReturnCode TapZoomAtTarget(T_DjiCameraPointInScreen target)
     rotationProperty.relativeAngleRotation.actionTime = TAP_ZOOM_DURATION / 10;
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -860,23 +927,23 @@ static T_DjiReturnCode TapZoomAtTarget(T_DjiCameraPointInScreen target)
      * sensor) / hybrid focal length). Here, suppose that images of all pixels of sensor are displayed in screen,
      * and that center of the image sensor coincides with center of rotation of the gimbal, and that optical axis of
      * camera coincides with x-axis of gimbal. */
-    hybridFocalLength = (dji_f32_t) s_cameraOpticalZoomFocalLength * s_cameraDigitalZoomFactor;
+    hybridFocalLength = (dji_f32_t)s_cameraOpticalZoomFocalLength * s_cameraDigitalZoomFactor;
 
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
 
-    rotationValue.pitch = (int32_t) (
-        atan2f((target.focusY - CENTER_POINT_IN_SCREEN_Y_VALUE) * IMAGE_SENSOR_Y_SIZE, hybridFocalLength) * 1800 /
-        DJI_PI);
-    rotationValue.yaw = (int32_t) (
-        atan2f((target.focusX - CENTER_POINT_IN_SCREEN_X_VALUE) * IMAGE_SENSOR_X_SIZE, hybridFocalLength) * 1800 /
-        DJI_PI);
+    rotationValue.pitch = (int32_t)(atan2f((target.focusY - CENTER_POINT_IN_SCREEN_Y_VALUE) * IMAGE_SENSOR_Y_SIZE, hybridFocalLength) * 1800 /
+                                    DJI_PI);
+    rotationValue.yaw = (int32_t)(atan2f((target.focusX - CENTER_POINT_IN_SCREEN_X_VALUE) * IMAGE_SENSOR_X_SIZE, hybridFocalLength) * 1800 /
+                                  DJI_PI);
 
     returnCode = osalHandler->MutexLock(s_tapZoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -884,10 +951,11 @@ static T_DjiReturnCode TapZoomAtTarget(T_DjiCameraPointInScreen target)
     s_tapZoomNewestGimbalRotationArgument.rotationMode = rotationMode;
     s_tapZoomNewestGimbalRotationArgument.rotationProperty = rotationProperty;
     s_tapZoomNewestGimbalRotationArgument.rotationValue = rotationValue;
-    s_tapZoomNewestTargetHybridFocalLength = (uint32_t) (hybridFocalLength * (float) s_tapZoomMultiplier);
+    s_tapZoomNewestTargetHybridFocalLength = (uint32_t)(hybridFocalLength * (float)s_tapZoomMultiplier);
 
     returnCode = osalHandler->MutexUnlock(s_tapZoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -899,19 +967,24 @@ static T_DjiReturnCode TapZoomAtTarget(T_DjiCameraPointInScreen target)
 
 static T_DjiReturnCode DjiTest_CameraHybridZoom(uint32_t focalLength)
 {
-    if (focalLength >= ZOOM_OPTICAL_FOCAL_MIN_LENGTH && focalLength <= ZOOM_OPTICAL_FOCAL_MAX_LENGTH) {
+    if (focalLength >= ZOOM_OPTICAL_FOCAL_MIN_LENGTH && focalLength <= ZOOM_OPTICAL_FOCAL_MAX_LENGTH)
+    {
         s_cameraOpticalZoomFocalLength = focalLength;
         s_cameraDigitalZoomFactor = ZOOM_DIGITAL_BASE_FACTOR;
-    } else if (focalLength < ZOOM_OPTICAL_FOCAL_MIN_LENGTH) {
+    }
+    else if (focalLength < ZOOM_OPTICAL_FOCAL_MIN_LENGTH)
+    {
         s_cameraOpticalZoomFocalLength = ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
         s_cameraDigitalZoomFactor = ZOOM_DIGITAL_BASE_FACTOR;
 
         USER_LOG_ERROR("focal length %d is smaller than min optical focal length %d.", focalLength,
                        ZOOM_OPTICAL_FOCAL_MIN_LENGTH);
         return DJI_ERROR_SYSTEM_MODULE_CODE_OUT_OF_RANGE;
-    } else {
+    }
+    else
+    {
         s_cameraOpticalZoomFocalLength = ZOOM_OPTICAL_FOCAL_MAX_LENGTH;
-        s_cameraDigitalZoomFactor = (float) focalLength / ZOOM_OPTICAL_FOCAL_MAX_LENGTH;
+        s_cameraDigitalZoomFactor = (float)focalLength / ZOOM_OPTICAL_FOCAL_MAX_LENGTH;
     }
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
@@ -923,7 +996,8 @@ static T_DjiReturnCode DjiTest_CameraRotationGimbal(T_TestCameraGimbalRotationAr
     T_DjiAircraftInfoBaseInfo aircraftBaseInfo = {0};
 
     returnCode = DjiAircraftInfo_GetBaseInfo(&aircraftBaseInfo);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("get aircraft information error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -931,21 +1005,28 @@ static T_DjiReturnCode DjiTest_CameraRotationGimbal(T_TestCameraGimbalRotationAr
     if (aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_SKYPORT_V2 ||
         aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_SKYPORT_V3 ||
         aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_EPORT_V2_RIBBON_CABLE ||
-        aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_NONE) {
+        aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_NONE)
+    {
         returnCode = DjiTest_GimbalRotate(gimbalRotationArgument.rotationMode, gimbalRotationArgument.rotationProperty,
                                           gimbalRotationArgument.rotationValue);
-        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("rotate gimbal error: 0x%08llX.", returnCode);
             return returnCode;
         }
-    } else if (aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_XPORT) {
+    }
+    else if (aircraftBaseInfo.djiAdapterType == DJI_SDK_ADAPTER_TYPE_XPORT)
+    {
         returnCode = DjiXPort_RotateSync(gimbalRotationArgument.rotationMode, gimbalRotationArgument.rotationProperty,
                                          gimbalRotationArgument.rotationValue);
-        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("rotate XPort error: 0x%08llX.", returnCode);
             return returnCode;
         }
-    } else {
+    }
+    else
+    {
         USER_LOG_ERROR("PSDK adapter type is invalid: %d.", aircraftBaseInfo.djiAdapterType);
         return DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT;
     }
@@ -972,14 +1053,15 @@ static void *UserCamera_Task(void *arg)
     uint32_t intervalFreq = 10;
 
     USER_UTIL_UNUSED(arg);
-    
 
-    while (1) {
+    while (1)
+    {
         osalHandler->TaskSleepMs(1000 / PAYLOAD_CAMERA_EMU_TASK_FREQ);
         step++;
 
         returnCode = osalHandler->MutexLock(s_commonMutex);
-        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
             continue;
         }
@@ -988,25 +1070,32 @@ static void *UserCamera_Task(void *arg)
             s_cameraSDCardState.remainSpaceInMB / SDCARD_PER_SECONDS_RECORD_SPACE_IN_MB;
         s_cameraSDCardState.availableCaptureCount = s_cameraSDCardState.remainSpaceInMB / SDCARD_PER_PHOTO_SPACE_IN_MB;
 
-        //realize your photo shoot and storage logic here
+        // realize your photo shoot and storage logic here
         if (s_cameraState.shootingState != DJI_CAMERA_SHOOTING_PHOTO_IDLE &&
-            photoCnt++ > TAKING_PHOTO_SPENT_TIME_MS_EMU / (1000 / PAYLOAD_CAMERA_EMU_TASK_FREQ)) {
+            photoCnt++ > TAKING_PHOTO_SPENT_TIME_MS_EMU / (1000 / PAYLOAD_CAMERA_EMU_TASK_FREQ))
+        {
             photoCnt = 0;
 
-            //store the photo after shooting finished
-            if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_SINGLE) {
+            // store the photo after shooting finished
+            if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_SINGLE)
+            {
                 take_snapshot_auto();
                 s_cameraSDCardState.remainSpaceInMB =
                     s_cameraSDCardState.remainSpaceInMB - SDCARD_PER_PHOTO_SPACE_IN_MB;
                 s_cameraState.isStoring = false;
                 s_cameraState.shootingState = DJI_CAMERA_SHOOTING_PHOTO_IDLE;
-            } else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_BURST) {
+            }
+            else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_BURST)
+            {
                 s_cameraSDCardState.remainSpaceInMB =
                     s_cameraSDCardState.remainSpaceInMB - SDCARD_PER_PHOTO_SPACE_IN_MB * s_cameraBurstCount;
                 s_cameraState.isStoring = false;
                 s_cameraState.shootingState = DJI_CAMERA_SHOOTING_PHOTO_IDLE;
-            } else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_INTERVAL) {
-                if (isStartIntervalPhotoAction == true) {
+            }
+            else if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_INTERVAL)
+            {
+                if (isStartIntervalPhotoAction == true)
+                {
                     s_cameraState.isStoring = false;
                     s_cameraState.shootingState = DJI_CAMERA_SHOOTING_PHOTO_IDLE;
                     s_cameraSDCardState.remainSpaceInMB =
@@ -1014,8 +1103,9 @@ static void *UserCamera_Task(void *arg)
                 }
             }
 
-            //check the remain space of sdcard
-            if (s_cameraSDCardState.remainSpaceInMB > SDCARD_TOTAL_SPACE_IN_MB) {
+            // check the remain space of sdcard
+            if (s_cameraSDCardState.remainSpaceInMB > SDCARD_TOTAL_SPACE_IN_MB)
+            {
                 s_cameraSDCardState.remainSpaceInMB = 0;
                 s_cameraSDCardState.isFull = true;
             }
@@ -1024,18 +1114,24 @@ static void *UserCamera_Task(void *arg)
             T_DjiCameraMediaFileInfo mediaFileInfo = {0};
 
             // push added media file information
-            if (s_cameraShootPhotoMode == dji_CAMERA_SHOOT_PHOTO_MODE_SINGLE) {
-                if (UtilFile_IsFileExist(PHOTO_FILE_PATH) == true) {
+            if (s_cameraShootPhotoMode == dji_CAMERA_SHOOT_PHOTO_MODE_SINGLE)
+            {
+                if (UtilFile_IsFileExist(PHOTO_FILE_PATH) == true)
+                {
                     psdkStat = PsdkTest_CameraMediaGetFileInfo(PHOTO_FILE_PATH, &mediaFileInfo);
-                    if (psdkStat != dji_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                    if (psdkStat != dji_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+                    {
                         PsdkLogger_UserUSER_LOG_ERRORrror("Get media file info error 0x%08llX", psdkStat);
                     }
 
                     psdkStat = PsdkPayloadCamera_PushAddedMediaFileInfo(PHOTO_FILE_PATH, mediaFileInfo);
-                    if (psdkStat != dji_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                    if (psdkStat != dji_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+                    {
                         PsdkLogger_UserUSER_LOG_ERRORrror("Push added media file info error 0x%08llX", psdkStat);
                     }
-                } else {
+                }
+                else
+                {
                     PsdkLogger_UserLogWarn("Can't found the media file by path. "
                                            "Probably because media file has not existed. "
                                            "Please check media file if exists. ");
@@ -1045,23 +1141,27 @@ static void *UserCamera_Task(void *arg)
         }
 
         returnCode = osalHandler->MutexUnlock(s_commonMutex);
-        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+        {
             USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
             continue;
         }
         // 2Hz
-        if (USER_UTIL_IS_WORK_TURN(step, 2, PAYLOAD_CAMERA_EMU_TASK_FREQ)) {
+        if (USER_UTIL_IS_WORK_TURN(step, 2, PAYLOAD_CAMERA_EMU_TASK_FREQ))
+        {
             returnCode = osalHandler->MutexLock(s_zoomMutex);
-            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
                 continue;
             }
 
 #ifdef USER_CAMERA_EMU_HYBRID_ZOOM_ON
-            //Add logic here for zoom camera
-            if (s_isStartContinuousOpticalZoom == true) {
+            // Add logic here for zoom camera
+            if (s_isStartContinuousOpticalZoom == true)
+            {
                 tempDigitalFactor = s_cameraDigitalZoomFactor;
-                tempFocalLength = (int32_t) s_cameraOpticalZoomFocalLength;
+                tempFocalLength = (int32_t)s_cameraOpticalZoomFocalLength;
                 // if (s_isOpticalZoomReachLimit == false) {
                 //     if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_IN) {
                 //         tempFocalLength += ((int) s_cameraZoomSpeed - DJI_CAMERA_ZOOM_SPEED_SLOWEST + 1) *
@@ -1080,22 +1180,27 @@ static void *UserCamera_Task(void *arg)
                 //         tempFocalLength = ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
                 //     }
                 // } else {
-                    if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_IN) {
-                        tempDigitalFactor += (dji_f32_t) ZOOM_DIGITAL_STEP_FACTOR;
-                    } else if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_OUT) {
-                        tempDigitalFactor -= (dji_f32_t) ZOOM_DIGITAL_STEP_FACTOR;
-                    }
+                if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_IN)
+                {
+                    tempDigitalFactor += (dji_f32_t)ZOOM_DIGITAL_STEP_FACTOR;
+                }
+                else if (s_cameraZoomDirection == DJI_CAMERA_ZOOM_DIRECTION_OUT)
+                {
+                    tempDigitalFactor -= (dji_f32_t)ZOOM_DIGITAL_STEP_FACTOR;
+                }
 
-                    if (tempDigitalFactor > (dji_f32_t) ZOOM_DIGITAL_MAX_FACTOR) {
-                        tempDigitalFactor = (dji_f32_t) ZOOM_DIGITAL_MAX_FACTOR;
-                    }
+                if (tempDigitalFactor > (dji_f32_t)ZOOM_DIGITAL_MAX_FACTOR)
+                {
+                    tempDigitalFactor = (dji_f32_t)ZOOM_DIGITAL_MAX_FACTOR;
+                }
 
-                    if (tempDigitalFactor < (dji_f32_t) ZOOM_DIGITAL_BASE_FACTOR) {
-                        // s_isOpticalZoomReachLimit = false;
-                        tempDigitalFactor = ZOOM_DIGITAL_BASE_FACTOR;
-                    }
+                if (tempDigitalFactor < (dji_f32_t)ZOOM_DIGITAL_BASE_FACTOR)
+                {
+                    // s_isOpticalZoomReachLimit = false;
+                    tempDigitalFactor = ZOOM_DIGITAL_BASE_FACTOR;
+                }
                 // }
-                s_cameraOpticalZoomFocalLength = (uint16_t) tempFocalLength;
+                s_cameraOpticalZoomFocalLength = (uint16_t)tempFocalLength;
                 s_cameraDigitalZoomFactor = tempDigitalFactor;
                 camera_set_zoom_ratio(s_cameraDigitalZoomFactor);
             }
@@ -1103,17 +1208,20 @@ static void *UserCamera_Task(void *arg)
 
 #if USER_CAMERA_EMU_TAP_ZOOM_ON
             returnCode = osalHandler->MutexLock(s_tapZoomMutex);
-            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
                 goto out;
             }
 
-            if (s_isStartTapZoom) {
+            if (s_isStartTapZoom)
+            {
                 s_isStartTapZoom = false;
                 s_isTapZooming = true;
 
                 returnCode = osalHandler->GetTimeMs(&s_tapZoomStartTime);
-                if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+                {
                     USER_LOG_ERROR("get start time error: 0x%08llX.", returnCode);
                 }
 
@@ -1124,25 +1232,34 @@ static void *UserCamera_Task(void *arg)
                     s_cameraTapZoomState.isGimbalMoving = true;
 
                 returnCode = DjiTest_CameraHybridZoom(s_tapZoomNewestTargetHybridFocalLength);
-                if (returnCode == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                    s_cameraTapZoomState.zoomState = (dji_f32_t) s_tapZoomNewestTargetHybridFocalLength >
-                                                     ((dji_f32_t) s_cameraOpticalZoomFocalLength *
-                                                      s_cameraDigitalZoomFactor)
-                                                     ? DJI_CAMERA_TAP_ZOOM_STATE_ZOOM_IN
-                                                     : DJI_CAMERA_TAP_ZOOM_STATE_ZOOM_OUT;
-                } else if (returnCode == DJI_ERROR_SYSTEM_MODULE_CODE_OUT_OF_RANGE) {
+                if (returnCode == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+                {
+                    s_cameraTapZoomState.zoomState = (dji_f32_t)s_tapZoomNewestTargetHybridFocalLength >
+                                                             ((dji_f32_t)s_cameraOpticalZoomFocalLength *
+                                                              s_cameraDigitalZoomFactor)
+                                                         ? DJI_CAMERA_TAP_ZOOM_STATE_ZOOM_IN
+                                                         : DJI_CAMERA_TAP_ZOOM_STATE_ZOOM_OUT;
+                }
+                else if (returnCode == DJI_ERROR_SYSTEM_MODULE_CODE_OUT_OF_RANGE)
+                {
                     USER_LOG_ERROR("hybrid zoom focal length beyond limit.");
                     s_cameraTapZoomState.zoomState = DJI_CAMERA_TAP_ZOOM_STATE_ZOOM_LIMITED;
-                } else {
+                }
+                else
+                {
                     USER_LOG_ERROR("hybrid zoom error: 0x%08llX.", returnCode);
                 }
-            } else if (s_isTapZooming) {
+            }
+            else if (s_isTapZooming)
+            {
                 returnCode = osalHandler->GetTimeMs(&currentTime);
-                if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+                {
                     USER_LOG_ERROR("get start time error: 0x%08llX.", returnCode);
                 }
 
-                if ((currentTime - s_tapZoomStartTime) >= TAP_ZOOM_DURATION) {
+                if ((currentTime - s_tapZoomStartTime) >= TAP_ZOOM_DURATION)
+                {
                     s_cameraTapZoomState.zoomState = DJI_CAMERA_TAP_ZOOM_STATE_IDLE;
                     s_cameraTapZoomState.isGimbalMoving = false;
                     s_isTapZooming = false;
@@ -1150,52 +1267,61 @@ static void *UserCamera_Task(void *arg)
             }
 
             returnCode = osalHandler->MutexUnlock(s_tapZoomMutex);
-            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
                 goto out;
             }
 #endif
 
-out:
+        out:
             returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
                 continue;
             }
         }
 
-        if (USER_UTIL_IS_WORK_TURN(step, intervalFreq, PAYLOAD_CAMERA_EMU_TASK_FREQ)) {
+        if (USER_UTIL_IS_WORK_TURN(step, intervalFreq, PAYLOAD_CAMERA_EMU_TASK_FREQ))
+        {
             returnCode = osalHandler->MutexLock(s_commonMutex);
-            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
                 continue;
             }
 
-            if (s_cameraState.isRecording) {
+            if (s_cameraState.isRecording)
+            {
                 uint16_t preTimeInSeconds = s_cameraState.currentVideoRecordingTimeInSeconds;
 
                 s_currentVideoRecordTimeInSeconds++;
 
                 s_cameraState.currentVideoRecordingTimeInSeconds = s_currentVideoRecordTimeInSeconds / intervalFreq;
-                if (s_cameraState.currentVideoRecordingTimeInSeconds > preTimeInSeconds) {
+                if (s_cameraState.currentVideoRecordingTimeInSeconds > preTimeInSeconds)
+                {
                     s_cameraSDCardState.remainSpaceInMB =
                         s_cameraSDCardState.remainSpaceInMB - SDCARD_PER_SECONDS_RECORD_SPACE_IN_MB;
-                    if (s_cameraSDCardState.remainSpaceInMB > SDCARD_TOTAL_SPACE_IN_MB) {
+                    if (s_cameraSDCardState.remainSpaceInMB > SDCARD_TOTAL_SPACE_IN_MB)
+                    {
                         s_cameraSDCardState.remainSpaceInMB = 0;
                         s_cameraSDCardState.isFull = true;
                     }
                 }
-            } else {
+            }
+            else
+            {
                 s_currentVideoRecordTimeInSeconds = 0;
             }
 
-            if (s_cameraState.isShootingIntervalStart == false) {
+            if (s_cameraState.isShootingIntervalStart == false)
+            {
                 isStartIntervalPhotoAction = false;
             }
 
-            if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_INTERVAL
-                && s_cameraState.isShootingIntervalStart == true && s_cameraPhotoTimeIntervalSettings.captureCount > 0
-                && (s_cameraPhotoTimeIntervalSettings.timeIntervalSeconds > 0 || s_cameraPhotoTimeIntervalSettings.timeIntervalMilliseconds > 0)) {
+            if (s_cameraShootPhotoMode == DJI_CAMERA_SHOOT_PHOTO_MODE_INTERVAL && s_cameraState.isShootingIntervalStart == true && s_cameraPhotoTimeIntervalSettings.captureCount > 0 && (s_cameraPhotoTimeIntervalSettings.timeIntervalSeconds > 0 || s_cameraPhotoTimeIntervalSettings.timeIntervalMilliseconds > 0))
+            {
                 uint16_t currentPhotoShootingIntervalTimeInMs = s_cameraState.currentPhotoShootingIntervalTimeInSeconds * 1000 +
                                                                 s_cameraState.currentPhotoShootingIntervalTimeInMs;
 
@@ -1206,7 +1332,8 @@ out:
 
                 if ((currentPhotoShootingIntervalTimeInMs == 0 &&
                      s_cameraState.currentPhotoShootingIntervalCount > 0) ||
-                    (s_cameraState.isShootingIntervalStart == true && isStartIntervalPhotoAction == false)) {
+                    (s_cameraState.isShootingIntervalStart == true && isStartIntervalPhotoAction == false))
+                {
 
                     isStartIntervalPhotoAction = true;
 
@@ -1214,19 +1341,23 @@ out:
                     s_cameraState.isStoring = true;
                     s_cameraState.currentPhotoShootingIntervalTimeInSeconds = s_cameraPhotoTimeIntervalSettings.timeIntervalSeconds;
                     s_cameraState.currentPhotoShootingIntervalTimeInMs = s_cameraPhotoTimeIntervalSettings.timeIntervalMilliseconds;
-                    if (s_cameraState.currentPhotoShootingIntervalCount < INTERVAL_PHOTOGRAPH_ALWAYS_COUNT) {
+                    if (s_cameraState.currentPhotoShootingIntervalCount < INTERVAL_PHOTOGRAPH_ALWAYS_COUNT)
+                    {
                         USER_LOG_INFO("interval taking photograph count:%d interval_time:%d.%ds",
                                       (s_cameraPhotoTimeIntervalSettings.captureCount -
                                        s_cameraState.currentPhotoShootingIntervalCount + 1),
                                       s_cameraPhotoTimeIntervalSettings.timeIntervalSeconds,
                                       s_cameraPhotoTimeIntervalSettings.timeIntervalMilliseconds / 100);
                         s_cameraState.currentPhotoShootingIntervalCount--;
-                        if (s_cameraState.currentPhotoShootingIntervalCount == 0) {
+                        if (s_cameraState.currentPhotoShootingIntervalCount == 0)
+                        {
                             s_cameraState.shootingState = DJI_CAMERA_SHOOTING_PHOTO_IDLE;
                             s_cameraState.isStoring = false;
                             s_cameraState.isShootingIntervalStart = false;
                         }
-                    } else {
+                    }
+                    else
+                    {
                         USER_LOG_INFO("interval taking photograph always, interval_time:%d.%ds",
                                       s_cameraPhotoTimeIntervalSettings.timeIntervalSeconds,
                                       s_cameraPhotoTimeIntervalSettings.timeIntervalMilliseconds / 100);
@@ -1236,7 +1367,8 @@ out:
             }
 
             returnCode = osalHandler->MutexUnlock(s_commonMutex);
-            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+            {
                 USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
                 continue;
             }
@@ -1258,25 +1390,29 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     T_DjiAircraftInfoBaseInfo aircraftInfoBaseInfo = {0};
 
     returnCode = osalHandler->MutexCreate(&s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("create mutex used to lock tap zoom arguments error: 0x%08llX", returnCode);
         return returnCode;
     }
 
     returnCode = osalHandler->MutexCreate(&s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("create mutex used to lock tap zoom arguments error: 0x%08llX", returnCode);
         return returnCode;
     }
 
     returnCode = osalHandler->MutexCreate(&s_tapZoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("create mutex used to lock tap zoom arguments error: 0x%08llX", returnCode);
         return returnCode;
     }
 
     returnCode = DjiPayloadCamera_Init();
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("init payload camera error:0x%08llX", returnCode);
         return returnCode;
     }
@@ -1308,7 +1444,8 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     s_commonHandler.FormatSDCard = FormatSDCard;
 
     returnCode = DjiPayloadCamera_RegCommonHandler(&s_commonHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("camera register common handler error:0x%08llX", returnCode);
     }
 
@@ -1320,7 +1457,8 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     s_exposureMeteringHandler.GetSpotMeteringTarget = GetSpotMeteringTarget;
 
     returnCode = DjiPayloadCamera_RegExposureMeteringHandler(&s_exposureMeteringHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("camera register exposure metering handler error:0x%08llX", returnCode);
         return returnCode;
     }
@@ -1339,7 +1477,8 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     s_focusHandler.GetFocusRingValueUpperBound = GetFocusRingValueUpperBound;
 
     returnCode = DjiPayloadCamera_RegFocusHandler(&s_focusHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("camera register adjustable focal point handler error:0x%08llX", returnCode);
         return returnCode;
     }
@@ -1351,7 +1490,8 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     s_digitalZoomHandler.GetDigitalZoomFactor = DjiTest_CameraGetDigitalZoomFactor;
 
     returnCode = DjiPayloadCamera_RegDigitalZoomHandler(&s_digitalZoomHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("camera register digital zoom handler error:0x%08llX", returnCode);
         return returnCode;
     }
@@ -1365,7 +1505,8 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     s_opticalZoomHandler.StopContinuousOpticalZoom = StopContinuousOpticalZoom;
 
     returnCode = DjiPayloadCamera_RegOpticalZoomHandler(&s_opticalZoomHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("camera register optical zoom handler error:0x%08llX", returnCode);
         return returnCode;
     }
@@ -1381,7 +1522,8 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
     s_tapZoomHandler.TapZoomAtTarget = TapZoomAtTarget;
 
     returnCode = DjiPayloadCamera_RegTapZoomHandler(&s_tapZoomHandler);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("camera register tap zoom handler error:0x%08llX", returnCode);
         return returnCode;
     }
@@ -1389,28 +1531,33 @@ T_DjiReturnCode DjiTest_CameraEmuBaseStartService(void)
 
     /* Create the camera emu taskHandle */
     if (osalHandler->TaskCreate("user_camera_task", UserCamera_Task,
-                                PAYLOAD_CAMERA_EMU_TASK_STACK_SIZE, NULL, &s_userCameraThread)
-        != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                                PAYLOAD_CAMERA_EMU_TASK_STACK_SIZE, NULL, &s_userCameraThread) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("user camera taskHandle create error");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
-    if (DjiAircraftInfo_GetBaseInfo(&aircraftInfoBaseInfo) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (DjiAircraftInfo_GetBaseInfo(&aircraftInfoBaseInfo) != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("get aircraft information error.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
     returnCode = DjiPayloadCamera_SetVideoStreamType(DJI_CAMERA_VIDEO_STREAM_TYPE_H264_DJI_FORMAT);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("DJI camera set video stream error.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
     s_cameraVideoStreamType = DJI_CAMERA_VIDEO_STREAM_TYPE_H264_DJI_FORMAT;
 
     returnCode = DjiPayloadCamera_GetVideoStreamRemoteAddress(ipAddr, &port);
-    if (returnCode == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_DEBUG("Get video stream remote address: %s, port: %d", ipAddr, port);
-    } else {
+    }
+    else
+    {
         USER_LOG_ERROR("get video stream remote address error.");
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
@@ -1426,7 +1573,8 @@ T_DjiReturnCode DjiTest_CameraGetDigitalZoomFactor(dji_f32_t *factor)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -1434,7 +1582,8 @@ T_DjiReturnCode DjiTest_CameraGetDigitalZoomFactor(dji_f32_t *factor)
     *factor = s_cameraDigitalZoomFactor;
 
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -1448,16 +1597,18 @@ T_DjiReturnCode DjiTest_CameraGetOpticalZoomFactor(dji_f32_t *factor)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
 
-    //Formula:factor = currentFocalLength / minFocalLength
-    *factor = (dji_f32_t) s_cameraOpticalZoomFocalLength / ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
+    // Formula:factor = currentFocalLength / minFocalLength
+    *factor = (dji_f32_t)s_cameraOpticalZoomFocalLength / ZOOM_OPTICAL_FOCAL_MIN_LENGTH;
 
     returnCode = osalHandler->MutexUnlock(s_zoomMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -1471,7 +1622,8 @@ T_DjiReturnCode DjiTest_CameraGetMode(E_DjiCameraMode *mode)
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
     returnCode = osalHandler->MutexLock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("lock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -1479,7 +1631,8 @@ T_DjiReturnCode DjiTest_CameraGetMode(E_DjiCameraMode *mode)
     *mode = s_cameraState.cameraMode;
 
     returnCode = osalHandler->MutexUnlock(s_commonMutex);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS)
+    {
         USER_LOG_ERROR("unlock mutex error: 0x%08llX.", returnCode);
         return returnCode;
     }
@@ -1489,7 +1642,8 @@ T_DjiReturnCode DjiTest_CameraGetMode(E_DjiCameraMode *mode)
 
 T_DjiReturnCode DjiTest_CameraGetVideoStreamType(E_DjiCameraVideoStreamType *type)
 {
-    if (s_isCamInited == false) {
+    if (s_isCamInited == false)
+    {
         return DJI_ERROR_SYSTEM_MODULE_CODE_NONSUPPORT_IN_CURRENT_STATE;
     }
 

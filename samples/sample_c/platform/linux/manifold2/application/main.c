@@ -58,13 +58,13 @@
 
 
 /* Private constants ---------------------------------------------------------*/
-#define DJI_LOG_PATH "Logs/DJI"
-#define DJI_LOG_INDEX_FILE_NAME "Logs/index"
-#define DJI_LOG_FOLDER_NAME "Logs"
+#define DJI_LOG_PATH "/mnt/sdcard/Logs/log"
+#define DJI_LOG_INDEX_FILE_NAME "/mnt/sdcard/Logs/index"
+#define DJI_LOG_FOLDER_NAME "/mnt/sdcard/Logs"
 #define DJI_LOG_PATH_MAX_SIZE (128)
 #define DJI_LOG_FOLDER_NAME_MAX_SIZE (32)
 #define DJI_LOG_MAX_COUNT (10)
-#define DJI_SYSTEM_CMD_STR_MAX_SIZE (64)
+#define DJI_SYSTEM_CMD_STR_MAX_SIZE (256)
 #define DJI_SYSTEM_RESULT_STR_MAX_SIZE (128)
 
 #define DJI_USE_WIDGET_INTERACTION 0
@@ -808,11 +808,11 @@ static T_DjiReturnCode DjiUser_LocalWriteFsInit(const char *path)
         }
     }
 
-    sprintf(systemCmd, "ln -sfrv %s " DJI_LOG_FOLDER_NAME "/latest.log", filePath);
-    system(systemCmd);
+    // sprintf(systemCmd, "ln -sfrv %s " DJI_LOG_FOLDER_NAME "/latest.log", filePath);
+    // system(systemCmd);
     return djiReturnCode;
 }
-
+// ln -sfrv /mnt/sdcard/Logs/log_0000_20210307_00-26-43.log /mnt/sdcard/Logs/latest.log
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-noreturn"
 #pragma GCC diagnostic ignored "-Wreturn-type"
@@ -976,7 +976,7 @@ static void mount_SD_card()
 
     printf("%s 设备存在。\n", devpath);
 
-    char cmd[256];
+    char cmd[256]; 
     // 检查设备是否已挂载到任意位置
     snprintf(cmd, sizeof(cmd), "mount | grep -q '%s'", devpath);
     if (system(cmd) == 0)

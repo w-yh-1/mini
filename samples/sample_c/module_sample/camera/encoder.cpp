@@ -14,17 +14,142 @@
 #include <string.h>
 #include <stdlib.h>
 #include <cerrno>
+#include <vector>
 
 #define msleep(x) usleep((x) * 1000)
 #define MPP_FRAME_FMT_IS_FBC(fmt) (fmt & MPP_FRAME_FBC_MASK)
 #define SZ_4K (4096)
 #define VIDEO_FRAME_AUD_LEN 6
 
-
-static void fill_half_char(char *dst, unsigned char (*src)[32], unsigned int index, unsigned int total_size, unsigned int color = 1);
+static void fill_half_char(char *dst, unsigned char (*src)[32], unsigned int index, unsigned int total_size, unsigned int color = 3);
 static unsigned int fill_int_string(char *dst, unsigned int value, unsigned int index, unsigned int total_size);
-static void fill_one_char(char *dst, const unsigned char (*src)[32], unsigned int index, unsigned int total_size, unsigned int color = 1);
+static void fill_one_char(char *dst, const unsigned char (*src)[32], unsigned int index, unsigned int total_size, unsigned int color = 3);
 static unsigned int fill_float_string(char *dst, unsigned int value, unsigned int index, unsigned int total_size);
+void (*Encoder::modify_osd_flaw_info)(MppEncOSDData *osd_data, int level) = nullptr;
+typedef struct H26xNalView_t
+{
+    const uint8_t *start;
+    size_t len;
+    uint8_t nal_type;
+} H26xNalView;
+
+static bool FindAnnexBStartCode(const uint8_t *data, size_t len, size_t from, size_t *start, size_t *sc_len)
+{
+    if (data == NULL || start == NULL || sc_len == NULL || len < 4)
+        return false;
+
+    for (size_t i = from; i + 3 < len; ++i)
+    {
+        if (data[i] == 0x00 && data[i + 1] == 0x00)
+        {
+            if (data[i + 2] == 0x01)
+            {
+                *start = i;
+                *sc_len = 3;
+                return true;
+            }
+            if (i + 4 < len && data[i + 2] == 0x00 && data[i + 3] == 0x01)
+            {
+                *start = i;
+                *sc_len = 4;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool ParseH26xNals(const uint8_t *data, size_t len, MppCodingType codingType, std::vector<H26xNalView> &nals)
+{
+    size_t start = 0;
+    size_t scLen = 0;
+
+    nals.clear();
+    if (!FindAnnexBStartCode(data, len, 0, &start, &scLen))
+        return false;
+
+    while (start + scLen < len)
+    {
+        size_t nextStart = 0;
+        size_t nextScLen = 0;
+        size_t nalStart = start;
+        size_t payloadStart = start + scLen;
+        size_t nalEnd;
+
+        if (FindAnnexBStartCode(data, len, payloadStart, &nextStart, &nextScLen))
+        {
+            nalEnd = nextStart;
+            start = nextStart;
+            scLen = nextScLen;
+        }
+        else
+        {
+            nalEnd = len;
+            start = len;
+        }
+
+        if (payloadStart >= nalEnd)
+            continue;
+
+        uint8_t nalType;
+        if (codingType == MPP_VIDEO_CodingHEVC)
+            nalType = (data[payloadStart] >> 1) & 0x3F;
+        else
+            nalType = data[payloadStart] & 0x1F;
+
+        H26xNalView nal;
+        nal.start = data + nalStart;
+        nal.len = nalEnd - nalStart;
+        nal.nal_type = nalType;
+        nals.push_back(nal);
+    }
+
+    return !nals.empty();
+}
+
+static bool H26xIsSps(MppCodingType codingType, uint8_t nalType)
+{
+    return (codingType == MPP_VIDEO_CodingHEVC) ? (nalType == 33) : (nalType == 7);
+}
+
+static bool H26xIsPps(MppCodingType codingType, uint8_t nalType)
+{
+    return (codingType == MPP_VIDEO_CodingHEVC) ? (nalType == 34) : (nalType == 8);
+}
+
+static bool H26xIsVps(MppCodingType codingType, uint8_t nalType)
+{
+    return (codingType == MPP_VIDEO_CodingHEVC) ? (nalType == 32) : false;
+}
+
+static bool H26xIsIdrLike(MppCodingType codingType, uint8_t nalType)
+{
+    if (codingType == MPP_VIDEO_CodingHEVC)
+        return nalType == 19 || nalType == 20 || nalType == 21;
+    return nalType == 5;
+}
+
+static void FlushRecordFile(FILE *fp, bool doSync)
+{
+    if (fp == NULL)
+        return;
+
+    if (fflush(fp) != 0)
+    {
+        USER_LOG_ERROR("fflush record file failed, errno=%d", errno);
+        return;
+    }
+
+    if (doSync)
+    {
+        int fd = fileno(fp);
+        if (fd >= 0 && fsync(fd) != 0)
+        {
+            USER_LOG_ERROR("fsync record file failed, errno=%d", errno);
+        }
+    }
+}
 bool Encoder::isCN = true;
 
 RK_S32 os_get_env_u32(const char *name, RK_U32 *value, RK_U32 default_value);
@@ -412,30 +537,20 @@ void Encoder::draw_en_osd(char *ptr, int DW_per_line)
     fill_string(ptr, "uvirsys", 0, DW_per_line);
     ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
 
-    // fill_string(ptr, "mode", 0, DW_per_line);      // MODE
-    // fill_one_char(ptr, &模式[8], 64, DW_per_line); // MODE:
-    // fill_string(ptr, "vl", 32 * 3, DW_per_line);   // MODE: VL
-    ptr += DW_per_line * 1024;                     // 下一行
-
     fill_string(ptr, "gain", 0, DW_per_line); // GAIN
     for (i = 2; i < 5; i++)
         fill_one_char(ptr, (unsigned char (*)[32]) & 增益[i * 4][0], i * 32, DW_per_line); // GAIN:   %
     ptr += DW_per_line * 1024;                                                             // 下一行
 
-    fill_string(ptr, "cont", 0, DW_per_line);      // UVPT
-    fill_one_char(ptr, &计数[8], 64, DW_per_line); // UVPT:
+    fill_string(ptr, "cont", 0, DW_per_line);      // cont
+    fill_one_char(ptr, &计数[8], 64, DW_per_line); // cont:
     count = fill_int_string(ptr, 0, 3 * 32, DW_per_line);
     fill_one_char(ptr, (unsigned char (*)[32])分计数, 3 * 32 + count * 16, DW_per_line, 6); // UVPT:0%
     ptr += DW_per_line * 1024;                                                              // 下一行
 
-    // fill_string(ptr, "dist", 0, DW_per_line);       // DIST
-    // fill_one_char(ptr, &距离[8], 64, DW_per_line);  // DIST:
-    // fill_float_string(ptr, 0, 3 * 32, DW_per_line); // DIST: 0.0
-    // ptr += DW_per_line * 1024;
-
-    // fill_string(ptr, "flaw", 0, DW_per_line);      // FLAW
-    // fill_one_char(ptr, &缺陷[8], 64, DW_per_line); // FLAW:
-    // fill_string(ptr, "none", 3 * 32, DW_per_line); // FLAW:NONE
+    fill_string(ptr, "flaw", 0, DW_per_line);      // FLAW
+    fill_one_char(ptr, &缺陷[8], 64, DW_per_line); // FLAW:
+    fill_string(ptr, "none", 3 * 32, DW_per_line); // FLAW:NONE
 }
 void Encoder::draw_time_osd(MppEncOSDData *osd_data)
 {
@@ -541,17 +656,10 @@ void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
     int gain = 0;
     for (i = 0; i < 4; i++) // i<字符串长度
     {
-        fill_one_char(ptr, (unsigned char(*)[32]) & 紫红光电[i * 4][0], i * 32, DW_per_line);
+        fill_one_char(ptr, (unsigned char (*)[32]) & 紫红光电[i * 4][0], i * 32, DW_per_line);
     }
-    ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
-    // for (i = 0; i < 3; i++)
-    // {
-    //     fill_one_char(ptr, (unsigned char (*)[32]) & 模式[i * 4][0], i * 32, DW_per_line);
-    // }
-    // for (i = 3; i < 5; i++)
-    // {
-    //     fill_one_char(ptr, (unsigned char (*)[32]) & 可见[(i - 3) * 4][0], i * 32, DW_per_line);
-    // }
+
+    // 增益
     ptr += DW_per_line * 1024; // 下一行
     for (i = 0; i < 5; i++)
     {
@@ -561,32 +669,24 @@ void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
         fill_int_string(ptr, gain, 6 * 16, DW_per_line);
     else
         fill_int_string(ptr, gain, 5 * 16, DW_per_line);
+
+    // 计数
     ptr += DW_per_line * 1024; // 下一行
     for (i = 0; i < 3; i++)
     {
         fill_one_char(ptr, (unsigned char (*)[32]) & 计数[i * 4][0], i * 32, DW_per_line);
     }
 
-    // count = fill_int_string(ptr, 0, i * 32, DW_per_line);
-    // fill_one_char(ptr, (unsigned char (*)[32])分计数, i * 32 + count * 16, DW_per_line, 6);
-    // ptr += DW_per_line * 1024;
-    // for (i = 0; i < 3; i++)
-    // {
-    //     fill_one_char(ptr, (unsigned char (*)[32]) & 距离[i * 4][0], i * 32, DW_per_line);
-    // }
-
     // 缺陷类型
-    //  fill_float_string(ptr, 0, 3 * 32, DW_per_line);
-    //  ptr += DW_per_line * 1024;
-    //  for (i = 0; i < 3; i++)
-    //  {
-    //      fill_one_char(ptr, (unsigned char(*)[32]) & 缺陷[i * 4][0], i * 32, DW_per_line);
-    //  }
-    //  for (i = 6; i < 13; i++)
-    //  {
-    //      // fill_one_char(ptr, (unsigned char(*)[32]) & 暂无[(i - 3) * 4][0], i * 32, DW_per_line, 2);
-    //      fill_half_char(ptr, (unsigned char(*)[32]) & NUM[2 * 11][0], i * 16, DW_per_line);
-    //  }
+    ptr += DW_per_line * 1024;
+    for (i = 0; i < 3; i++)
+    {
+        fill_one_char(ptr, (unsigned char (*)[32]) & 缺陷[i * 4][0], i * 32, DW_per_line);
+    }
+    for (i = 6; i <= 13; i++)
+    {
+        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], i * 16, DW_per_line);
+    }
 }
 RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt)
 {
@@ -663,7 +763,6 @@ RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt)
     return stride;
 }
 
-
 MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
 {
     MppEncOSDRegion *region = osd_data->region;
@@ -679,8 +778,8 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
         buf_size = mpp_buffer_get_size(buf);
     // 公司名称，模式，光子数，距离，增益，缺陷
     region[0].inverse = 0;
-    region[0].start_mb_x = 7;
-    region[0].start_mb_y = 0;
+    region[0].start_mb_x = 2;
+    region[0].start_mb_y = 4;
     region[0].num_mb_x = mb_w;
     region[0].num_mb_y = mb_h;
     region[0].buf_offset = 0;
@@ -688,7 +787,7 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
     /* create buffer and write osd index data */
     if (buf_size < mb_w * mb_h * 256)
     {
-        buf_size = mb_w * mb_h * 256 ; // 
+        buf_size = mb_w * mb_h * 256; //
         if (buf)
             mpp_buffer_put(buf);
 
@@ -712,7 +811,11 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
 
 void Encoder::switch_language(MppEncOSDData *osd_data, bool is_CN)
 {
-
+    if (osd_data == NULL || osd_data->buf == NULL)
+    {
+        printf("osd_data is null, cannot switch language\n");
+        return;
+    }
     Encoder::isCN = is_CN;
     MppBuffer buf = osd_data->buf;
 
@@ -724,46 +827,16 @@ void Encoder::switch_language(MppEncOSDData *osd_data, bool is_CN)
         else
             draw_en_osd(ptr);
     }
-}
-
-static uint32_t calculate_nal_len(char *ptr, int len)
-{
-
-    int head_index = -1;
-    int end_index = -1;
-    char nal_head[] = {0x00, 0x00, 0x00, 0x01};
-    uint32_t i = 0, j = 0;
-
-    for (;;)
+    if (isCN)
     {
-        if (ptr[i + j] != nal_head[j])
-        {
-            i++;
-            j = 0;
-            continue;
-        }
-        else
-            j++;
-
-        if (j == 4)
-        {
-
-            if (head_index < 0)
-            {
-                head_index = i;
-                i += 4;
-            }
-            else if (end_index < 0)
-            {
-                end_index = i;
-                break;
-            }
-            j = 0;
-        }
+       modify_osd_flaw_info = modify_osd_cn_flaw_info;
     }
-
-    return end_index - head_index;
+    else
+    {
+       modify_osd_flaw_info = modify_osd_en_flaw_info;
+    }
 }
+
 Encoder::Encoder(RK_U32 width, RK_U32 height, MppFrameFormat frame_fmt, MppCodingType type, MppEncRcMode rc_mode) : args{0}, osd_data{0}, m_filepath{0}, m_record_state(record_idle)
 {
     args.width = width;
@@ -1240,22 +1313,7 @@ void *encode_input_thread(void *arg)
     Encoder *encodec = (Encoder *)arg;
     for (;;)
     {
-        // 修改OSD信息
-        if (encodec->osd_infos_ptr.cam_mode_ptr)
-        {
-
-            if (encodec->isCN)
-            {
-                Encoder::modify_osd_cn_mode(&encodec->osd_data, *encodec->osd_infos_ptr.cam_mode_ptr);
-            }
-            else
-            {
-                Encoder::modify_osd_en_mode(&encodec->osd_data, *encodec->osd_infos_ptr.cam_mode_ptr);
-            }
-            Encoder::modify_osd_gain_data(&encodec->osd_data, *encodec->osd_infos_ptr.gain_val_ptr);
-            Encoder::modify_osd_count_data(&encodec->osd_data, *encodec->osd_infos_ptr.count_val_ptr, *encodec->osd_infos_ptr.count_period_ptr);
-            Encoder::modify_osd_distance_data(&encodec->osd_data, *encodec->osd_infos_ptr.distance_val_ptr);
-        }
+        // TODO:修改OSD信息
         // 每10次循环，调用一次draw_time_osd
         if (count++ % 10 == 0)
         {
@@ -1278,8 +1336,8 @@ void *encode_output_thread(void *arg)
     char *ptr;
     size_t len;
     RK_U32 eoi = 0;
-    RK_U32 soi = 0;
-    int header_len = 0;
+    std::vector<H26xNalView> nals;
+    uint32_t recordFrameFlushCnt = 0;
     static uint8_t frameAudInfo[] = {0x00, 0x00, 0x00, 0x01, 0x09, 0x10};
     for (;;)
     {
@@ -1305,44 +1363,102 @@ void *encode_output_thread(void *arg)
             if (mpp_packet_is_partition(packet))
             {
                 eoi = mpp_packet_is_eoi(packet);
-                soi = mpp_packet_is_soi(packet);
             }
             else
             {
                 eoi = 1;
-                soi = 1;
             }
             if (len > 0)
             {
+                bool wroteRecordData = false;
+                bool hasIdrLike = false;
+                bool hasSps = false;
+                bool hasPps = false;
+                bool hasVps = false;
+
+                if (ParseH26xNals((const uint8_t *)ptr, len, encodec->args.type, nals))
+                {
+                    for (size_t i = 0; i < nals.size(); ++i)
+                    {
+                        const H26xNalView &nal = nals[i];
+                        if (H26xIsVps(encodec->args.type, nal.nal_type))
+                        {
+                            encodec->m_last_vps.assign(nal.start, nal.start + nal.len);
+                            hasVps = true;
+                        }
+                        else if (H26xIsSps(encodec->args.type, nal.nal_type))
+                        {
+                            encodec->m_last_sps.assign(nal.start, nal.start + nal.len);
+                            hasSps = true;
+                        }
+                        else if (H26xIsPps(encodec->args.type, nal.nal_type))
+                        {
+                            encodec->m_last_pps.assign(nal.start, nal.start + nal.len);
+                            hasPps = true;
+                        }
+
+                        if (H26xIsIdrLike(encodec->args.type, nal.nal_type))
+                            hasIdrLike = true;
+                    }
+                }
+
                 if (eoi)
                 {
                     memcpy(ptr + len, frameAudInfo, VIDEO_FRAME_AUD_LEN);
-                    encodec->write_func(ptr, len + VIDEO_FRAME_AUD_LEN,eoi);
+                    encodec->write_func(ptr, len + VIDEO_FRAME_AUD_LEN, eoi);
                 }
                 else
                 {
-                    encodec->write_func(ptr, len,eoi);
+                    encodec->write_func(ptr, len, eoi);
                 }
-                if (encodec->m_record_state == record_start && soi)
+
+                if (encodec->m_record_state == record_start)
                 {
-                    if (ptr[4] == 0x67)
+                    if (hasIdrLike)
                     {
-                        if (header_len == 0)
+                        if (encodec->args.type == MPP_VIDEO_CodingHEVC)
                         {
-                            header_len += calculate_nal_len(ptr, len);              // sps
-                            header_len += calculate_nal_len(ptr + header_len, len); // pps
+                            if (!hasVps && !encodec->m_last_vps.empty())
+                            {
+                                fwrite(encodec->m_last_vps.data(), 1, encodec->m_last_vps.size(), encodec->m_fp);
+                                wroteRecordData = true;
+                            }
                         }
-                        if (ptr[header_len + 4] == 0x65)
+
+                        if (!hasSps && !encodec->m_last_sps.empty())
                         {
-                            USER_LOG_INFO("开始录像\n");
-                            encodec->m_record_state = record_doing;
-                            fwrite(ptr, 1, len, encodec->m_fp);
+                            fwrite(encodec->m_last_sps.data(), 1, encodec->m_last_sps.size(), encodec->m_fp);
+                            wroteRecordData = true;
                         }
+
+                        if (!hasPps && !encodec->m_last_pps.empty())
+                        {
+                            fwrite(encodec->m_last_pps.data(), 1, encodec->m_last_pps.size(), encodec->m_fp);
+                            wroteRecordData = true;
+                        }
+
+                        fwrite(ptr, 1, len, encodec->m_fp);
+                        wroteRecordData = true;
+                        encodec->m_record_state = record_doing;
+                        recordFrameFlushCnt = 0;
+                        USER_LOG_INFO("开始录像\n");
                     }
                 }
                 else if (encodec->m_record_state == record_doing || encodec->m_record_state == record_end)
                 {
                     fwrite(ptr, 1, len, encodec->m_fp);
+                    wroteRecordData = true;
+                }
+
+                if (wroteRecordData)
+                {
+                    recordFrameFlushCnt++;
+
+                    if (recordFrameFlushCnt >= 150)
+                    {
+                        FlushRecordFile(encodec->m_fp, true);
+                        recordFrameFlushCnt = 0;
+                    }
                 }
             }
         } while (!eoi);
@@ -1352,8 +1468,11 @@ void *encode_output_thread(void *arg)
         mpp_packet_deinit(&packet);
         if (encodec->m_record_state == record_end)
         {
+            FlushRecordFile(encodec->m_fp, true);
             encodec->m_record_state = record_idle;
             fclose(encodec->m_fp);
+            encodec->m_fp = NULL;
+            recordFrameFlushCnt = 0;
             USER_LOG_ERROR("停止录像\n");
             pthread_cond_signal(&encodec->transcode_cond);
         }
@@ -1393,7 +1512,7 @@ MPP_RET Encoder::encode_input()
 
     if (pthread_mutex_trylock(&packet_lock))
     {
-        USER_LOG_ERROR("encode input lock failed\n");
+        USER_LOG_DEBUG("encode input lock failed\n");
         return ret;
     }
     // pthread_mutex_lock(&packet_lock);
@@ -1485,6 +1604,7 @@ RET:
     }
     return ret;
 }
+
 size_t Encoder::calc_buf_size(MppFrameFormat fmt)
 {
     size_t size;
@@ -1567,7 +1687,8 @@ bool Encoder::start_record(char *save_path)
     m_fp = fopen(save_path, "w+b");
     if (m_fp == NULL)
         return false;
-    memcpy(m_filepath, save_path, 256);
+    strncpy(m_filepath, save_path, sizeof(m_filepath) - 1);
+    m_filepath[sizeof(m_filepath) - 1] = '\0';
     pthread_mutex_lock(&packet_lock);
     mpi->control(ctx, MPP_ENC_SET_IDR_FRAME, NULL);
     m_record_state = record_start;
@@ -1576,7 +1697,7 @@ bool Encoder::start_record(char *save_path)
 }
 void Encoder::stop_record()
 {
-    if (m_record_state == record_doing)
+    if (m_record_state == record_doing || m_record_state == record_start)
     {
         pthread_mutex_lock(&packet_lock);
         m_record_state = record_end;
@@ -1629,77 +1750,86 @@ void *mpp_osal_calloc(size_t size)
     return ptr;
 }
 
-void Encoder::modify_osd_cn_mode(MppEncOSDData *osd_data, unsigned int mode)
+void Encoder::modify_osd_en_flaw_info(MppEncOSDData *osd_data, int level)
 {
+    int i;
     MppBuffer buf = osd_data->buf;
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
-    unsigned int index = 3 * 32;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256;
-    int i = 0;
-    switch (mode)
+    ptr += mb_w * 2 * 256 * 3;
+    switch (level)
     {
-    case VL_Mode:
-        for (i = 0; i < 2; i++)
+    case 0: // FINE index=3*32
+        fill_string(ptr, "fine", 3 * 32, mb_w / 2, 2);
+        for (i = 0; i < 4; i++) // 清除上一帧残余数据
         {
-            fill_one_char(ptr, (unsigned char (*)[32]) & 可见[i * 4][0], index + i * 32, mb_w / 2);
+            fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 5 * 32 + i * 16, mb_w / 2, 2);
         }
         break;
-    // case UV_Mode:
-    //     fill_one_char(ptr, (unsigned char(*)[32]) & 紫红光电[0 * 4][0], index + i++ * 32, mb_w / 2);
-    //     fill_one_char(ptr, (unsigned char(*)[32]) & 紫红光电[4 * 4][0], index + i * 32, mb_w / 2);
-    //     break;
-    case VL_UV_blendMode:
-        for (i = 0; i < 2; i++)
-        {
-            fill_one_char(ptr, (unsigned char (*)[32]) & 融合[i * 4][0], index + i * 32, mb_w / 2);
-        }
+    case 1: // GENERAL
+        fill_string(ptr, "general", 3 * 32, mb_w / 2, 3);
+        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 32 * 3 + 16 * 7, mb_w / 2, 3);
+        break;
+    case 2: // SERIOUS
+        fill_string(ptr, "serious", 3 * 32, mb_w / 2, 4);
+        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 32 * 3 + 16 * 7, mb_w / 2, 4);
+        break;
+    case 3: // CRITICAL
+        fill_string(ptr, "critical", 3 * 32, mb_w / 2, 5);
         break;
     default:
         break;
     }
 }
 
-void Encoder::modify_osd_en_mode(MppEncOSDData *osd_data, unsigned int mode)
+void Encoder::modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level)
 {
+    int i;
     MppBuffer buf = osd_data->buf;
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
-    unsigned int index = 3 * 32;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256;
-    int i = 0;
-    switch (mode)
+    ptr += mb_w * 2 * 256 * 3;
+    switch (level)
     {
-    case VL_Mode:
-        fill_string(ptr, "vl", index, mb_w / 2);
-        for (i = 0; i < 2; i++) // 清除上一帧残余数据
+    case 0: // 暂无
+        for (i = 3; i < 5; i++)
         {
-            fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 4 * 32 + i * 16, mb_w / 2);
+            fill_one_char(ptr, (unsigned char (*)[32]) & 暂无[(i - 3) * 4][0], i * 32, mb_w / 2, 2);
         }
         break;
-    // case UV_Mode:
-    //     fill_string(ptr, "uv", index, mb_w / 2);
-    //     for (i = 0; i < 2; i++) // 清除上一帧残余数据
-    //     {
-    //         fill_half_char(ptr, (unsigned char(*)[32]) & NUM[2 * 11][0], 4 * 32 + i * 16, mb_w / 2);
-    //     }
-    //     break;
-    case VL_UV_blendMode:
-        fill_string(ptr, "fuse", index, mb_w / 2);
+    case 1: // 一般
+        for (i = 3; i < 5; i++)
+        {
+            fill_one_char(ptr, (unsigned char (*)[32]) & 一般[(i - 3) * 4][0], i * 32, mb_w / 2, 3);
+        }
         break;
+    case 2: // 严重
+        for (i = 3; i < 5; i++)
+        {
+            fill_one_char(ptr, (unsigned char (*)[32]) & 严重[(i - 3) * 4][0], i * 32, mb_w / 2, 4);
+        }
+        break;
+    case 3: // 危急
+        for (i = 3; i < 5; i++)
+        {
+            fill_one_char(ptr, (unsigned char (*)[32]) & 危急[(i - 3) * 4][0], i * 32, mb_w / 2, 5);
+        }
+        break;
+
     default:
         break;
     }
 }
+
 void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
 {
     MppBuffer buf = osd_data->buf;
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 2; // 光子计数行
+    ptr += mb_w * 2 * 256 * 1; // 增益行
     if (value < 100)
     {
         if (value > 9)
@@ -1717,6 +1847,7 @@ void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
     else
         fill_int_string(ptr, value, 5 * 16, mb_w / 2);
 }
+
 void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value, bool period)
 {
     MppBuffer buf = osd_data->buf;
@@ -1726,7 +1857,7 @@ void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value,
     int c;
     unsigned int index = 3 * 32;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 3; // 光子计数行
+    ptr += mb_w * 2 * 256 * 2; // 光子计数行
     if (value > 1000000)
         return;
     c = fill_int_string(ptr, value, index, mb_w / 2);
@@ -1741,23 +1872,6 @@ void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value,
     }
     index += 32;
     for (int i = c + 2; i < 10; i++, index += 16) // 清除上一帧残余数据
-    {
-        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], index, mb_w / 2);
-    }
-}
-void Encoder::modify_osd_distance_data(MppEncOSDData *osd_data, unsigned int value)
-{
-    MppBuffer buf = osd_data->buf;
-    MppEncOSDRegion *region = osd_data->region;
-    RK_U32 mb_w = region->num_mb_x;
-    char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    unsigned int index = 3 * 32;
-    int c;
-
-    ptr += mb_w * 2 * 256 * 4;
-    c = fill_float_string(ptr, value, index, mb_w / 2);
-    index += 16 * c;
-    for (int i = c; i < 5; i++, index += 16)
     {
         fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], index, mb_w / 2);
     }
