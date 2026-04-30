@@ -8,6 +8,7 @@
 #include <atomic>
 #include <pthread.h>
 #include <sys/eventfd.h>
+#include <time.h>
 
 // 默认快照保存目录，可在编译时覆盖
 #ifndef SNAPSHOT_DIR
@@ -52,6 +53,8 @@ private:
     std::atomic<uint8_t> mSnapState[2];
     // 每个缓冲对应的目标文件路径（定长，避免跨线程动态分配）
     char mSnapPath[2][512] = {{0}};
+    // 每个缓冲对应的拍照时间戳，供文件名/OSD/PNG元数据共用
+    time_t mSnapTimestamp[2] = {0, 0};
     // 后台保存线程
     pthread_t mSnapThread = 0;
     // 后台激光测距线程
@@ -61,6 +64,7 @@ private:
     // 待抓取请求（只允许占位一个）
     std::atomic<bool> mPendingSnap{false};
     char mPendingPathBuf[512] = {0};
+    time_t mPendingSnapTimestamp = 0;
 
 public:
     camera_process(/* args */);
@@ -93,6 +97,7 @@ public:
     int request_snapshot(const char* path);
     // 自动生成文件名并拍照：使用 SNAPSHOT_DIR 和本地时间，若重名则追加序号
     int request_snapshot_auto();
+    int request_snapshot_with_time(const char *path, time_t snapshot_time);
 
     // 开始录像
     int start_recording();

@@ -10,6 +10,7 @@
 #include <vector>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <time.h>
@@ -47,10 +48,12 @@ static std::atomic_bool g_osd_use_chinese{false};
 static void uv_cb_func(int et, int status, uint32_t value, void *user);
 static bool init_UV_async(uv_async_t **uv_ctx);
 static bool deinit_UV_async(uv_async_t *uv_ctx);
-static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height);
-static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes);
+static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height, time_t snapshot_time);
+static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes,
+                                    time_t snapshot_time);
 static bool ensure_dir_exists(const char *dir);
-static std::string build_unique_png_path(const char *dir);
+static std::string build_unique_png_path(const char *dir, time_t snapshot_time);
+static void ensure_process_timezone();
 static inline void eventfd_notify(int efd)
 {
     if (efd < 0)
@@ -66,6 +69,30 @@ static inline void eventfd_drain(int efd)
     uint64_t val;
     ssize_t n = read(efd, &val, sizeof(val));
     (void)n;
+}
+
+static void ensure_process_timezone()
+{
+    static bool timezoneInitialized = false;
+
+    if (timezoneInitialized)
+        return;
+
+    if (setenv("TZ", "CST-8", 1) != 0)
+    {
+        USER_LOG_ERROR("set TZ failed, errno=%d\n", errno);
+        return;
+    }
+
+    tzset();
+    timezoneInitialized = true;
+
+    time_t now = time(NULL);
+    struct tm tmv;
+    char timebuf[64] = {0};
+    localtime_r(&now, &tmv);
+    strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S %z %Z", &tmv);
+    USER_LOG_INFO("process timezone forced to CST-8, local time: %s\n", timebuf);
 }
 // --- 快照后台线程（静态成员） ---
 void *camera_process::snapshot_worker(void *arg)
@@ -95,6 +122,7 @@ void *camera_process::snapshot_worker(void *arg)
                 }
                 DMA_Buffer &buf = self->mSnapBuf[i];
                 const char *path = self->mSnapPath[i];
+                time_t snapshot_time = self->mSnapTimestamp[i];
                 // 确保 CPU 可见
                 dma_sync_device_to_cpu(buf.dma_fd);
 
@@ -112,9 +140,8 @@ void *camera_process::snapshot_worker(void *arg)
                 if (g_ftosd_inited)
                 {
                     char tb[64];
-                    time_t now = time(NULL);
                     struct tm tmv;
-                    localtime_r(&now, &tmv);
+                    localtime_r(&snapshot_time, &tmv);
                     strftime(tb, sizeof(tb), "%Y-%m-%d %H:%M:%S", &tmv);
                     const bool use_cn = g_osd_use_chinese.load(std::memory_order_acquire);
                     char s0[128];
@@ -148,11 +175,11 @@ void *camera_process::snapshot_worker(void *arg)
                 int rc = 0;
                 if (stride_bytes == row_bytes)
                 {
-                    rc = save_image_as_png(path, base, width, height);
+                    rc = save_image_as_png(path, base, width, height, snapshot_time);
                 }
                 else
                 {
-                    rc = save_image_as_png_stride(path, base, width, height, stride_bytes);
+                    rc = save_image_as_png_stride(path, base, width, height, stride_bytes, snapshot_time);
                 }
                 if (rc != 0)
                 {
@@ -304,6 +331,7 @@ void *camera_process::camera_task(void *arg)
                     // 将路径写入对应槽
                     strncpy(processor->mSnapPath[idx], local_path, sizeof(processor->mSnapPath[idx]) - 1);
                     processor->mSnapPath[idx][sizeof(processor->mSnapPath[idx]) - 1] = '\0';
+                    processor->mSnapTimestamp[idx] = processor->mPendingSnapTimestamp;
 
                     // 发布 Ready 并唤醒保存线程
                     processor->mSnapState[idx].store((uint8_t)2, std::memory_order_release);
@@ -704,6 +732,8 @@ static bool deinit_UV_async(uv_async_t *uv_ctx)
 
 bool CameraMediaStartService(void *func_ptr)
 {
+    ensure_process_timezone();
+
     processor = new camera_process();
 
     if (processor == NULL)
@@ -739,7 +769,7 @@ int resume_cam_stream()
     return 0;
 }
 
-static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height)
+static int save_image_as_png(const char *filename, const uint8_t *image_data, int width, int height, time_t snapshot_time)
 {
     if (!filename || !image_data || width <= 0 || height <= 0)
     {
@@ -806,9 +836,8 @@ static int save_image_as_png(const char *filename, const uint8_t *image_data, in
     png_text text_ptr[3];
     memset(text_ptr, 0, sizeof(text_ptr));
     char timebuf[64];
-    time_t now = time(NULL);
     struct tm tmv;
-    localtime_r(&now, &tmv);
+    localtime_r(&snapshot_time, &tmv);
     strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S %z", &tmv);
     char gainbuf[32];
     snprintf(gainbuf, sizeof(gainbuf), "%u", (unsigned)uv_gain_display_raw.load(std::memory_order_acquire));
@@ -865,7 +894,8 @@ static int save_image_as_png(const char *filename, const uint8_t *image_data, in
 }
 
 // 支持任意 stride 的 PNG 写入，避免额外 memcpy
-static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes)
+static int save_image_as_png_stride(const char *filename, const uint8_t *image_data, int width, int height, int stride_bytes,
+                                    time_t snapshot_time)
 {
     if (!filename || !image_data || width <= 0 || height <= 0)
     {
@@ -936,9 +966,8 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
     png_text text_ptr[3];
     memset(text_ptr, 0, sizeof(text_ptr));
     char timebuf[64];
-    time_t now = time(NULL);
     struct tm tmv;
-    localtime_r(&now, &tmv);
+    localtime_r(&snapshot_time, &tmv);
     strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S %z", &tmv);
     char gainbuf[64];
     snprintf(gainbuf, sizeof(gainbuf), "%u", (unsigned)uv_gain_display_raw.load(std::memory_order_acquire));
@@ -1173,6 +1202,11 @@ float camera_get_zoom_ratio()
 // 成员方法：请求一次拍照
 int camera_process::request_snapshot(const char *path)
 {
+    return request_snapshot_with_time(path, time(NULL));
+}
+
+int camera_process::request_snapshot_with_time(const char *path, time_t snapshot_time)
+{
     if (!path || !*path)
         return -1;
     // 若已有待抓取请求，则返回忙
@@ -1193,6 +1227,7 @@ int camera_process::request_snapshot(const char *path)
     // 写入路径并发布请求
     strncpy(mPendingPathBuf, path, sizeof(mPendingPathBuf) - 1);
     mPendingPathBuf[sizeof(mPendingPathBuf) - 1] = '\0';
+    mPendingSnapTimestamp = snapshot_time;
     mPendingSnap.store(true, std::memory_order_release);
     return 0;
 }
@@ -1205,8 +1240,9 @@ int camera_process::request_snapshot_auto()
         USER_LOG_ERROR("snapshot dir not available: %s\n", SNAPSHOT_DIR);
         return -1;
     }
-    std::string path = build_unique_png_path(SNAPSHOT_DIR);
-    return request_snapshot(path.c_str());
+    time_t snapshot_time = time(NULL);
+    std::string path = build_unique_png_path(SNAPSHOT_DIR, snapshot_time);
+    return request_snapshot_with_time(path.c_str(), snapshot_time);
 }
 
 static bool ensure_dir_exists(const char *dir)
@@ -1225,11 +1261,10 @@ static bool ensure_dir_exists(const char *dir)
     return false;
 }
 
-static std::string build_unique_png_path(const char *dir)
+static std::string build_unique_png_path(const char *dir, time_t snapshot_time)
 {
-    time_t t = time(NULL);
     struct tm tmv;
-    localtime_r(&t, &tmv);
+    localtime_r(&snapshot_time, &tmv);
     char ts[32];
     strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tmv);
     std::string base = std::string(dir) + ts;

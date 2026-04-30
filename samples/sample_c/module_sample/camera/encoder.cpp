@@ -462,6 +462,7 @@ static void fill_half_char(char *dst, unsigned char (*src)[32], unsigned int ind
         index += 8;
     }
 }
+
 static void fill_string(char *dst, const char *str, unsigned int index, unsigned int line_width = 8, unsigned int color = 1)
 {
     unsigned int str_len = strlen(str);
@@ -982,8 +983,10 @@ MPP_RET Encoder::cfg_setup()
     if (!args.bps)
     {
         // args.bps = args.width * args.height / 8 * (args.fps_out_num / args.fps_out_den);
-        // args.bps = 4800000;
-        args.bps = 6400000; // 8M
+        // args.bps = 4800000; // 4.8M
+        args.bps = 5600000; // 5.6M
+        // args.bps = 6400000; // 6.4M
+        
     }
     args.gop_len = 30;
 
