@@ -29,8 +29,8 @@ private:
     MppFrameFormat mCamFmt = MPP_FMT_YUV420SP;
     MppFrameFormat mUvCamFmt = MPP_FMT_BGR888;
     int mBufFmt = RK_FORMAT_BGRA_8888;
-    RK_U32 mCamWidth = 3840;
-    RK_U32 mCamHeight = 2160;
+    RK_U32 mCamWidth = 4208;
+    RK_U32 mCamHeight = 3120;
     RK_U32 mUvCamWidth = 1280;
     RK_U32 mUvCamHeight = 720;
     Encoder *mEncoder = NULL;

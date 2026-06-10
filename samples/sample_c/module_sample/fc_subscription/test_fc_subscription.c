@@ -474,7 +474,7 @@ static void *UserFcSubscription_Task(void *arg)
             USER_LOG_ERROR("get value of GPS date error.");
             continue;
         }
-        USER_LOG_INFO("DATE:%d",gpsDate);
+        // USER_LOG_INFO("DATE:%d",gpsDate);
         djiStat = DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_GPS_TIME,
                                                           (uint8_t *)&gpsTime,
                                                           sizeof(T_DjiFcSubscriptionGpsTime),
@@ -484,7 +484,7 @@ static void *UserFcSubscription_Task(void *arg)
             USER_LOG_ERROR("get value of GPS time error.");
             continue;
         }
-        USER_LOG_INFO("TIME:%d",gpsTime);
+        // USER_LOG_INFO("TIME:%d",gpsTime);
         //若获取到的GPS时间(gpsDate:yyyymmdd,gpsTime:hhmmss)与系统时间相差超过30s,则根据GPS时间重设系统时间
         if(CompareGpsTimeWithSystemTime(gpsDate, gpsTime) > 30)
         {

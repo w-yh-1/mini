@@ -321,6 +321,7 @@ static int v4l2_set_format(CamSource *ctx, RK_U32 width, RK_U32 height, MppFrame
 
     return camera_source_ioctl(ctx->fd, VIDIOC_S_FMT, &vfmt);
 }
+
 static int v4l2_require_bufs(CamSource *ctx, int bufcnt)
 {
     struct v4l2_requestbuffers req = {0};

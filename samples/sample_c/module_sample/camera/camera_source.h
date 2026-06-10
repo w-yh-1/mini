@@ -21,6 +21,9 @@
 #include "rga.h"
 #include "mpp_frame.h"
 
+#define CAMERA_VIDEO_FPS 20
+#define CAMERA_FRAME_INTERVAL_US (1000000 / CAMERA_VIDEO_FPS)
+
 extern void *mem_osal_calloc(size_t size);
 #define MEM_ALIGN 32
 #define MEM_ALIGN_MASK (MEM_ALIGN - 1)

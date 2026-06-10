@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
+#include <math.h>
 #include <sys/eventfd.h>
 #include <poll.h>
 #include "dji_camera_manager.h"
@@ -54,6 +55,30 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
 static bool ensure_dir_exists(const char *dir);
 static std::string build_unique_png_path(const char *dir, time_t snapshot_time);
 static void ensure_process_timezone();
+static constexpr int VL_BASE_CROP_WIDTH = 2560;
+static constexpr int VL_BASE_CROP_HEIGHT = 1440;
+static inline int align_even_floor(int value)
+{
+    return value & ~1;
+}
+
+static inline int align_even_ceil(int value)
+{
+    return (value + 1) & ~1;
+}
+
+static inline int clamp_even_to_range(int value, int min_value, int max_value)
+{
+    if (value < min_value)
+        value = min_value;
+    if (value > max_value)
+        value = max_value;
+    value = align_even_floor(value);
+    if (value < min_value)
+        value = align_even_ceil(min_value);
+    return value;
+}
+
 static inline void eventfd_notify(int efd)
 {
     if (efd < 0)
@@ -254,7 +279,7 @@ void *camera_process::camera_task(void *arg)
     DELAY_INIT;
     for (;;)
     {
-        DELAY_US(33 * 1000, 1000);
+        DELAY_US(CAMERA_FRAME_INTERVAL_US, 1000);
         // Process main camera
         if (cam_stream_on)
         {
@@ -439,6 +464,7 @@ bool camera_process::init(pOutput_func output_func)
     set_uv_gain_raw(60); // 默认值（显示与用户一致）
 
     load_correction_factors(CORRECTION_FACTOR_CONFIG_FILE);
+    update_rects(0);
 
     ret = get_dma_buf(&mTempBuf, mEncodeWidth, mEncodeHeight, mBufFmt);
     if (ret < 0)
@@ -497,17 +523,77 @@ void camera_process::update_rects(int distance)
 
     last_distance = distance;
     last_zoom_ratio = zoom_ratio;
-    // 计算偏移
+    // 计算理想偏移：当前以固定偏移为主；距离补偿先保留占位。
     int x_offset = distance > 0 ? zoom_ratio * (horzDistCorrectionFactor / distance + horzAngCorrectionFactor) : zoom_ratio * horzAngCorrectionFactor;
     int y_offset = distance > 0 ? zoom_ratio * (vertDistCorrectionFactor / distance + vertAngCorrectionFactor) : zoom_ratio * vertAngCorrectionFactor;
 
-    // 理想目标区域
+    // 可见光主摄裁剪：优先利用 VL 在传感器上的裁切余量吸收平移，
+    // 只有 VL 裁剪窗已经碰到边界时，才让 UV 叠加层补剩余残差。
+    const int cam_w = (int)mCamWidth;
+    const int cam_h = (int)mCamHeight;
+    const int enc_w = mEncodeWidth;
+    const int enc_h = mEncodeHeight;
+    const float vl_zoom = zoom_ratio < 1.0f ? 1.0f : zoom_ratio;
+
+    // 在最大 16:9 传感器裁剪区内，再取一个固定的 2560x1440 基准区，
+    // 用于补偿 VL/UV 焦距差；zoom_ratio 则继续在这个基准区内部做电子变倍。
+    int base_w = VL_BASE_CROP_WIDTH;
+    int base_h = VL_BASE_CROP_HEIGHT;
+    if (base_w > cam_w || base_h > cam_h)
+    {
+        // 若后续换成更小分辨率传感器，则回退到传感器所能容纳的最大 16:9 区域。
+        if ((int64_t)cam_w * enc_h <= (int64_t)cam_h * enc_w)
+        {
+            base_w = align_even_floor(cam_w);
+            base_h = align_even_ceil((int)((int64_t)base_w * enc_h / enc_w));
+            base_h = clamp_even_to_range(base_h, 2, cam_h);
+        }
+        else
+        {
+            base_h = align_even_floor(cam_h);
+            base_w = align_even_ceil((int)((int64_t)base_h * enc_w / enc_h));
+            base_w = clamp_even_to_range(base_w, 2, cam_w);
+        }
+    }
+    else
+    {
+        base_w = align_even_floor(base_w);
+        base_h = align_even_floor(base_h);
+    }
+
+    const int vl_width = clamp_even_to_range((int)(base_w / vl_zoom), 2, base_w);
+    const int vl_height = clamp_even_to_range((int)(base_h / vl_zoom), 2, base_h);
+    const int vl_center_x = align_even_floor((cam_w - vl_width) / 2);
+    const int vl_center_y = align_even_floor((cam_h - vl_height) / 2);
+
+    // 期望把输出平移量优先折算到 VL 源裁剪窗中。
+    const float vl_src_shift_x_f = (float)x_offset * (float)vl_width / (float)enc_w;
+    const float vl_src_shift_y_f = (float)y_offset * (float)vl_height / (float)enc_h;
+    const int vl_src_shift_x = align_even_floor((int)lroundf(vl_src_shift_x_f));
+    const int vl_src_shift_y = align_even_floor((int)lroundf(vl_src_shift_y_f));
+
+    const int vl_min_x = 0;
+    const int vl_min_y = 0;
+    const int vl_max_x = align_even_floor(cam_w - vl_width);
+    const int vl_max_y = align_even_floor(cam_h - vl_height);
+
+    mVlSrcRect.width = vl_width;
+    mVlSrcRect.height = vl_height;
+    mVlSrcRect.x = clamp_even_to_range(vl_center_x + vl_src_shift_x, vl_min_x, vl_max_x);
+    mVlSrcRect.y = clamp_even_to_range(vl_center_y + vl_src_shift_y, vl_min_y, vl_max_y);
+
+    const int actual_vl_src_shift_x = mVlSrcRect.x - vl_center_x;
+    const int actual_vl_src_shift_y = mVlSrcRect.y - vl_center_y;
+    const int residual_x_offset = x_offset - (int)lroundf((float)actual_vl_src_shift_x * (float)enc_w / (float)vl_width);
+    const int residual_y_offset = y_offset - (int)lroundf((float)actual_vl_src_shift_y * (float)enc_h / (float)vl_height);
+
+    // 理想 UV 目标区域：仅补 VL 没吃掉的残差。
     int temp_dst_width = 1920 * scaleFactor * zoom_ratio;
     int temp_dst_height = 1080 * scaleFactor * zoom_ratio;
-    int temp_dst_x = (1920 - temp_dst_width) / 2 + x_offset;
-    int temp_dst_y = (1080 - temp_dst_height) / 2 + y_offset;
+    int temp_dst_x = (1920 - temp_dst_width) / 2 + residual_x_offset;
+    int temp_dst_y = (1080 - temp_dst_height) / 2 + residual_y_offset;
 
-    // 实际目标区域
+    // 实际 UV 目标区域
     mUvDstRect.x = std::max(0, temp_dst_x);
     mUvDstRect.y = std::max(0, temp_dst_y);
     mUvDstRect.width = std::min(1920, temp_dst_width + temp_dst_x) - mUvDstRect.x;
@@ -517,11 +603,6 @@ void camera_process::update_rects(int distance)
     mUvSrcRect.y = temp_dst_y < 0 ? 720 * (-temp_dst_y) / temp_dst_height : 0;
     mUvSrcRect.width = 1280 * mUvDstRect.width / temp_dst_width;
     mUvSrcRect.height = 720 * mUvDstRect.height / temp_dst_height;
-
-    mVlSrcRect.width = 3840 / zoom_ratio;
-    mVlSrcRect.x = (3840 - mVlSrcRect.width) / 2;
-    mVlSrcRect.height = 2160 / zoom_ratio;
-    mVlSrcRect.y = (2160 - mVlSrcRect.height) / 2;
     return;
 }
 
@@ -602,7 +683,7 @@ int camera_process::get_vert_ang_correction() const { return vertAngCorrectionFa
 void camera_process::set_scale_factor(float v) { scaleFactor = v; }
 float camera_process::get_scale_factor() const { return scaleFactor; }
 
-void camera_process::set_zoom_ratio(float v) { zoom_ratio = v; }
+void camera_process::set_zoom_ratio(float v) { zoom_ratio = v < 1.0f ? 1.0f : v; }
 float camera_process::get_zoom_ratio() const { return zoom_ratio; }
 
 void camera_process::apply_language(bool use_cn)
@@ -711,6 +792,18 @@ bool init_UV_async(uv_async_t **uv_ctx)
         *uv_ctx = NULL;
         return false;
     }
+
+    // 默认关闭 UV 区域计数功能，避免上电后立即启用区域光子统计。
+    rc = uv_async_enable_region_photon_counting(*uv_ctx, 0);
+    if (rc != UV_OK)
+    {
+        USER_LOG_ERROR("uv_async_enable_region_photon_counting(disable) failed: %d\n", rc);
+        uv_async_stop(*uv_ctx);
+        uv_async_destroy(*uv_ctx);
+        *uv_ctx = NULL;
+        return false;
+    }
+    
     return true;
 }
 

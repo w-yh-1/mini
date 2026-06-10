@@ -975,21 +975,14 @@ MPP_RET Encoder::cfg_setup()
     if (args.fps_in_den == 0)
         args.fps_in_den = 1;
     if (args.fps_in_num == 0)
-        args.fps_in_num = 30;
+        args.fps_in_num = CAMERA_VIDEO_FPS;
     if (args.fps_out_den == 0)
         args.fps_out_den = 1;
     if (args.fps_out_num == 0)
-        args.fps_out_num = 30;
+        args.fps_out_num = CAMERA_VIDEO_FPS;
     if (!args.bps)
-    {
-        // args.bps = args.width * args.height / 8 * (args.fps_out_num / args.fps_out_den);
-        // args.bps = 4800000; // 4.8M
-        args.bps = 5600000; // 5.6M
-        // args.bps = 6400000; // 6.4M
-        
-    }
-    args.gop_len = 30;
-
+        args.bps = args.width * args.height / 8 * (args.fps_out_num / args.fps_out_den);
+    args.gop_len = CAMERA_VIDEO_FPS;
     ret = mpp_enc_cfg_set_s32(cfg, "prep:width", args.width);
     ret = mpp_enc_cfg_set_s32(cfg, "prep:height", args.height);
     ret = mpp_enc_cfg_set_s32(cfg, "prep:hor_stride", args.hor_stride);

@@ -29,6 +29,8 @@
 #include <utils/util_misc.h>
 #include <errno.h>
 #include <signal.h>
+#include <time.h>
+#include <sys/time.h>
 #include <power_management/test_power_management.h>
 #include <gimbal_emu/test_payload_gimbal_emu.h>
 #include <fc_subscription/test_fc_subscription.h>
@@ -81,6 +83,9 @@ typedef struct
 static FILE *s_djiLogFile;
 static FILE *s_djiLogFileCnt;
 static pthread_t s_monitorThread = 0;
+static bool s_logTimeSyncApplied = false;
+static char s_logTimeSyncLineBuf[256] = {0};
+static size_t s_logTimeSyncLineLen = 0;
 
 /* Private functions declaration ---------------------------------------------*/
 static T_DjiReturnCode DjiUser_PrepareSystemEnvironment(void);
@@ -93,6 +98,8 @@ static void *DjiUser_MonitorTask(void *argument);
 static T_DjiReturnCode DjiTest_HighPowerApplyPinInit();
 static T_DjiReturnCode DjiTest_WriteHighPowerApplyPin(E_DjiPowerManagementPinState pinState);
 static void DjiUser_NormalExitHandler(int signalNum);
+static bool DjiUser_TryApplySystemTimeFromLogLine(const char *line);
+static void DjiUser_ProcessLogTimeSync(const uint8_t *data, uint16_t dataLen);
 static void OutPutFunc(void *data, size_t len, bool isEnd);
 static bool GetVideoStreamState();
 
@@ -701,6 +708,11 @@ static T_DjiReturnCode DjiUser_LocalWrite(const uint8_t *data, uint16_t dataLen)
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
     }
 
+    if (!s_logTimeSyncApplied)
+    {
+        DjiUser_ProcessLogTimeSync(data, dataLen);
+    }
+
     realLen = fwrite(data, 1, dataLen, s_djiLogFile);
     fflush(s_djiLogFile);
     if (realLen == dataLen)
@@ -710,6 +722,105 @@ static T_DjiReturnCode DjiUser_LocalWrite(const uint8_t *data, uint16_t dataLen)
     else
     {
         return DJI_ERROR_SYSTEM_MODULE_CODE_UNKNOWN;
+    }
+}
+
+static bool DjiUser_TryApplySystemTimeFromLogLine(const char *line)
+{
+    const char *timeMarker;
+    int year, month, day, hour, minute, second;
+    struct tm tmValue;
+    time_t targetTime;
+    struct timeval tv;
+
+    if (line == NULL)
+    {
+        return false;
+    }
+
+    if (strstr(line, "time_sync") == NULL)
+    {
+        return false;
+    }
+
+    timeMarker = strstr(line, "Current time: ");
+    if (timeMarker == NULL)
+    {
+        return false;
+    }
+
+    timeMarker += strlen("Current time: ");
+    if (sscanf(timeMarker, "%d.%d.%d %d:%d:%d",
+               &year, &month, &day, &hour, &minute, &second) != 6)
+    {
+        return false;
+    }
+
+    memset(&tmValue, 0, sizeof(tmValue));
+    tmValue.tm_year = year - 1900;
+    tmValue.tm_mon = month - 1;
+    tmValue.tm_mday = day;
+    tmValue.tm_hour = hour;
+    tmValue.tm_min = minute;
+    tmValue.tm_sec = second;
+    tmValue.tm_isdst = -1;
+
+    targetTime = mktime(&tmValue);
+    if (targetTime == (time_t)-1)
+    {
+        return false;
+    }
+
+    tv.tv_sec = targetTime;
+    tv.tv_usec = 0;
+    if (settimeofday(&tv, NULL) != 0)
+    {
+        printf("settimeofday from log failed, errno=%d\n", errno);
+        return false;
+    }
+
+    s_logTimeSyncApplied = true;
+    printf("system time restored from log line: %04d-%02d-%02d %02d:%02d:%02d\n",
+           year, month, day, hour, minute, second);
+    return true;
+}
+
+static void DjiUser_ProcessLogTimeSync(const uint8_t *data, uint16_t dataLen)
+{
+    uint16_t i;
+
+    if (data == NULL || dataLen == 0 || s_logTimeSyncApplied)
+    {
+        return;
+    }
+
+    for (i = 0; i < dataLen && !s_logTimeSyncApplied; ++i)
+    {
+        char ch = (char)data[i];
+
+        if (ch == '\r')
+        {
+            continue;
+        }
+
+        if (ch == '\n')
+        {
+            s_logTimeSyncLineBuf[s_logTimeSyncLineLen] = '\0';
+            DjiUser_TryApplySystemTimeFromLogLine(s_logTimeSyncLineBuf);
+            s_logTimeSyncLineLen = 0;
+            continue;
+        }
+
+        if (s_logTimeSyncLineLen < sizeof(s_logTimeSyncLineBuf) - 1)
+        {
+            s_logTimeSyncLineBuf[s_logTimeSyncLineLen++] = ch;
+        }
+        else
+        {
+            s_logTimeSyncLineBuf[s_logTimeSyncLineLen] = '\0';
+            DjiUser_TryApplySystemTimeFromLogLine(s_logTimeSyncLineBuf);
+            s_logTimeSyncLineLen = 0;
+        }
     }
 }
 
