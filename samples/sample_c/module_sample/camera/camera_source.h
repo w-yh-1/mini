@@ -20,6 +20,7 @@
 #include "im2d.hpp"
 #include "rga.h"
 #include "mpp_frame.h"
+#define IQ_PATH "/etc/iqfiles"
 
 #define CAMERA_VIDEO_FPS 20
 #define CAMERA_FRAME_INTERVAL_US (1000000 / CAMERA_VIDEO_FPS)
@@ -50,6 +51,7 @@ typedef struct CamSource CamSource;
 //     rga_buffer_handle_t rga_buf_handle{0};
 //     rga_buffer_t rga_buf{0};
 // } HyBirdBuffer;
+
 struct CamFrame
 {
     void *start;
@@ -62,11 +64,13 @@ struct CamFrame
     MppBuffer mpp_buf;
 };
 typedef struct CamFrame CamFrame;
-
+typedef struct IspCtx_ IspCtx;
 extern "C"
 {
-
+    IspCtx *isp_init(const char *device, uint32_t width, uint32_t height);
+    int isp_deinit(IspCtx *ctx);
     // Create a new context to capture frames from <fname>. Returns NULL on error.
+    CamSource *isp_camera_source_init(const char *device, RK_U32 bufcnt, RK_U32 width, RK_U32 height, MppFrameFormat fmt);
     CamSource *camera_source_init(const char *device, RK_U32 bufcnt, RK_U32 width, RK_U32 height, MppFrameFormat fmt);
     CamSource *mjpg_camera_source_init(const char *device, RK_U32 bufcnt, RK_U32 width, RK_U32 height);
     // Stop capturing and free a context.
@@ -89,6 +93,11 @@ extern "C"
     void focus_near(CamSource *ctx);
     void focus_far(CamSource *ctx);
     RgaSURF_FORMAT change_MppFmt2RkFmt(MppFrameFormat fmt);
+    void set_focus_automode(const CamSource *ctx);
+    void set_focus_manualmode(const CamSource *ctx);
+    void sample_set_focus_semiautomode(const CamSource *ctx);
+    void oneshot_focus(const CamSource *ctx);
+    void oneshot_focus_auto();
 }
 
 #endif 

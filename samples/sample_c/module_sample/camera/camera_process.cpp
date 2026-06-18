@@ -381,13 +381,15 @@ bool camera_process::init(pOutput_func output_func)
     int ret = 0;
     if (mCamSource == NULL)
     {
-        mCamSource = camera_source_init(mCam, mBufcnt, mCamWidth, mCamHeight, mCamFmt);
+        mCamSource = isp_camera_source_init(mCam, mBufcnt, mCamWidth, mCamHeight, mCamFmt);
         if (mCamSource == NULL)
         {
-            USER_LOG_ERROR("camera_source_init failed\n");
+            USER_LOG_ERROR("isp_camera_source_init failed\n");
             return false;
         }
     }
+    sample_set_focus_semiautomode(mCamSource);
+
     if (mUvCamSource == NULL)
     {
         mUvCamSource = camera_source_init(mUvCam, mBufcnt, mUvCamWidth, mUvCamHeight, mUvCamFmt);
@@ -1405,4 +1407,17 @@ void camera_process::stop_recording()
     if (!processor)
         return;
     return processor->mEncoder->stop_record();
+}
+
+void oneshot_focus_auto()
+{
+    if (!processor)
+        return;
+    processor->do_oneshot_focus();
+}
+
+void camera_process::do_oneshot_focus()
+{
+    if (mCamSource)
+        oneshot_focus(mCamSource);
 }

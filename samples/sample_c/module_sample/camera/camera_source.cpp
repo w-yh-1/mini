@@ -32,12 +32,20 @@
 #include <linux/videodev2.h>
 #include "camera_source.h"
 // #include "utils.h"
+#include "uAPI2/rk_aiq_user_api2_imgproc.h"
+#include "rk_aiq_user_api2_sysctl.h"
+#include "rk_aiq_user_api_common.h"
+#include "rk_aiq_user_api2_imgproc.h"
 
 
-
-
-
-
+struct IspCtx_
+{
+    rk_aiq_sys_ctx_t*       aiq_ctx;
+    char                    sns_name[32];
+    char                    iqpath[256];
+    uint32_t                width;
+    uint32_t                height;
+};
 
 struct CamSource
 {
@@ -49,6 +57,7 @@ struct CamSource
     MppFrameFormat fmt;
     CamFrame fbuf[10]; // frame buffers
     bool autoFocus = true;
+    IspCtx *isp_ctx; // ISP context
 };
 class decoder
 {
@@ -436,6 +445,143 @@ static int v4l2_queue_dmabuf(CamSource *ctx, int index, int fd)
         return -1;
     }
     return 0;
+}
+
+IspCtx *isp_init(const char *device, uint32_t width, uint32_t height)
+{
+    int ret;
+    char sns_entity_name[64];
+    rk_aiq_working_mode_t work_mode = RK_AIQ_WORKING_MODE_NORMAL;
+    IspCtx *isp_ctx = new IspCtx();
+    if (!isp_ctx)
+    {
+        printf("Failed to allocate ISP context\n");
+        return nullptr;
+    }
+
+    // Initialize ISP context here
+    // For example, set up the device, configure parameters, etc.
+    // This is a placeholder as the actual implementation depends on the ISP API.
+    printf("ISP initialized with device: %s, width: %u, height: %u\n", device, width, height);
+    strcpy(sns_entity_name, rk_aiq_uapi2_sysctl_getBindedSnsEntNmByVd(device));
+    printf("sns_entity_name:%s\n", sns_entity_name);
+    sscanf(&sns_entity_name[6], "%s", isp_ctx->sns_name);
+    printf("sns_name:%s\n", isp_ctx->sns_name);
+    isp_ctx->aiq_ctx = rk_aiq_uapi2_sysctl_init(sns_entity_name, IQ_PATH, NULL, NULL);
+    ret = rk_aiq_uapi2_sysctl_prepare(isp_ctx->aiq_ctx, isp_ctx->width, isp_ctx->height,
+                                      work_mode);
+    if (ret != XCAM_RETURN_NO_ERROR)
+    {
+        printf("Failed to prepare ISP context\n");
+        delete isp_ctx;
+        return nullptr;
+    }
+    ret = rk_aiq_uapi2_sysctl_start(isp_ctx->aiq_ctx);
+    if (ret != XCAM_RETURN_NO_ERROR)
+    {
+        printf("Failed to start ISP context\n");
+        rk_aiq_uapi2_sysctl_deinit(isp_ctx->aiq_ctx);
+        delete isp_ctx;
+        return nullptr;
+    }
+    return isp_ctx;
+}
+
+int isp_deinit(IspCtx *ctx)
+{
+    if (ctx)
+    {
+        if (ctx->aiq_ctx)
+        {
+            rk_aiq_uapi2_sysctl_stop(ctx->aiq_ctx,false);
+            rk_aiq_uapi2_sysctl_deinit(ctx->aiq_ctx);
+        }
+        delete ctx;
+        ctx = nullptr;
+    }
+    return 0;
+}
+
+CamSource *isp_camera_source_init(const char *device, RK_U32 bufcnt, RK_U32 width, RK_U32 height, MppFrameFormat format)
+{
+    int rk_format = change_MppFmt2RkFmt(format);
+    RK_U32 i;
+    RK_U32 buf_len = 0;
+    CamSource *ctx;
+
+    ctx = MEM_CALLOC(CamSource, 1);
+    if (!ctx)
+        return NULL;
+    ctx->mem_type = V4L2_MEMORY_MMAP;
+    ctx->fd = open(device, O_RDWR, 0);
+    if (ctx->fd < 0)
+    {
+        printf("Cannot open vl device\n");
+        goto FAIL;
+    }
+    ctx->isp_ctx = isp_init(device, width, height);
+
+    if (!ctx->isp_ctx)
+    {
+        printf("Failed to initialize ISP context\n");
+        goto FAIL;
+    }
+    // Set device format
+    if (-1 == v4l2_set_format(ctx, width, height, format))
+    {
+        printf("Failed to set format\n");
+        goto FAIL;
+    }
+
+    // Request memory-mapped buffers
+    if (-1 == v4l2_require_bufs(ctx, bufcnt))
+        goto FAIL;
+
+    // mmap() the buffers into userspace memory
+    for (i = 0; i < ctx->bufcnt; i++)
+    {
+        if (-1 == v4l2_mmap_bufs(ctx, i))
+        {
+            printf("Faile to mmap buf%d\n", i);
+            goto FAIL;
+        }
+
+        if (-1 == v4l2_export_bufs(ctx, i, width, height, rk_format))
+        {
+            printf("Failed to export buf%d\n", i);
+            goto FAIL;
+        }
+    }
+
+    for (i = 0; i < ctx->bufcnt; i++)
+    {
+        if (MPP_NOK == camera_source_put_frame(ctx, i))
+        {
+            printf("Failed to queue buf%d\n", i);
+            goto FAIL;
+        }
+    }
+
+    // Start capturing
+    if (-1 == camera_source_ioctl(ctx->fd, VIDIOC_STREAMON, &ctx->type))
+    {
+        printf("ERROR: VIDIOC_STREAMON\n");
+        camera_source_deinit(ctx);
+        goto FAIL;
+    }
+
+    // skip some frames at start
+    for (i = 0; i < ctx->bufcnt * 3; i++)
+    {
+        RK_S32 idx = camera_source_get_frame(ctx);
+        if (idx >= 0)
+            camera_source_put_frame(ctx, idx);
+    }
+    return ctx;
+
+FAIL:
+    camera_source_deinit(ctx);
+    return NULL;
 }
 
 // Create a new context to capture frames from <fname>.
@@ -880,3 +1026,26 @@ void *mem_osal_calloc(size_t size)
     return ptr;
 }
 
+void set_focus_automode(const CamSource *ctx)
+{
+    rk_aiq_uapi2_setFocusMode(ctx->isp_ctx->aiq_ctx, OP_AUTO);
+    printf("setFocusMode auto\n");
+}
+
+void set_focus_manualmode(const CamSource *ctx)
+{
+    rk_aiq_uapi2_setFocusMode(ctx->isp_ctx->aiq_ctx, OP_MANUAL);
+    printf("setFocusMode manual\n");
+}
+
+void sample_set_focus_semiautomode(const CamSource *ctx)
+{
+    rk_aiq_uapi2_setFocusMode(ctx->isp_ctx->aiq_ctx, OP_SEMI_AUTO);
+    printf("setFocusMode semi-auto\n");
+}
+
+void oneshot_focus(const CamSource *ctx)
+{
+    rk_aiq_uapi2_oneshotFocus(ctx->isp_ctx->aiq_ctx);
+    printf("oneshotFocus\n");
+}

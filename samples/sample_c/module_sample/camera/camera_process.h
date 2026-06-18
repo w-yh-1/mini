@@ -87,6 +87,7 @@ public:
     void set_scale_factor(float v); float get_scale_factor() const;
     // zoom ratio
     void set_zoom_ratio(float v); float get_zoom_ratio() const;
+    void do_oneshot_focus();
     // 统一 OSD 语言切换（内部同时作用录像与拍照）
     void apply_language(bool use_cn);
     im_rect mUvSrcRect = {160, 90, 960, 540};

@@ -54,11 +54,32 @@ IF(NOT LIBDRM_HEAD_DIR)
     message(FATAL_ERROR "libdrm headers not found!")
 ENDIF()
 
+set(RKAIQ_SYSROOT "/home/wyh/SDK_DIR/rk-linux5.10-SDK-20260122/buildroot/output/rockchip_rk3588/host/aarch64-buildroot-linux-gnu/sysroot")
+ 
+FIND_PATH(RKAIQ_HEAD_DIR rkaiq
+    PATHS
+    ${RKAIQ_SYSROOT}/usr/include
+    /usr/local/include
+    /usr/include)
+ 
+IF(NOT RKAIQ_HEAD_DIR)
+    message(FATAL_ERROR "rkaiq headers not found!")
+ENDIF()
+
 SET(RKMODS_INCLUDES
     ${RGA_HEAD_DIR}/rga
     ${JSONCPP_HEAD_DIR}/jsoncpp
     ${ROCKCHIP_HEAD_DIR}/rockchip
-    ${LIBDRM_HEAD_DIR}/libdrm)
+    ${LIBDRM_HEAD_DIR}/libdrm
+    ${RKAIQ_HEAD_DIR}/rkaiq
+    ${RKAIQ_HEAD_DIR}/rkaiq/xcore
+    ${RKAIQ_HEAD_DIR}/rkaiq/algos
+    ${RKAIQ_HEAD_DIR}/rkaiq/common
+    ${RKAIQ_HEAD_DIR}/rkaiq/ipc_server
+    ${RKAIQ_HEAD_DIR}/rkaiq/iq_parser
+    ${RKAIQ_HEAD_DIR}/rkaiq/iq_parser_v2
+    ${RKAIQ_HEAD_DIR}/rkaiq/smartIr
+    ${RKAIQ_HEAD_DIR}/rkaiq/uAPI2)
 
 FIND_LIBRARY(RGA_LIBRARY rga
     /usr/local/lib
@@ -116,12 +137,23 @@ IF(NOT GUIDE_LIBRARY)
     message(FATAL_ERROR "libGuideUSB2LiveStream not found!")
 ENDIF()
 
+FIND_LIBRARY(RKAIQ_LIBRARY rkaiq
+    ${RKAIQ_SYSROOT}/usr/lib
+    /usr/local/lib
+    /usr/lib
+)
+ 
+IF(NOT RKAIQ_LIBRARY)
+    message(FATAL_ERROR "librkaiq not found!")
+ENDIF()
+
 SET(RKMODS_LIBRARIES
     ${RGA_LIBRARY}
     ${JSONCPP_LIBRARY} 
     ${RK_MPP_LIBRARY}
     ${V4L2_MPP_LIBRARY}
     ${DRM_LIBRARY}
-    ${GUIDE_LIBRARY}) 
+    ${GUIDE_LIBRARY}
+    ${RKAIQ_LIBRARY}) 
 
 SET(RKMODS_FOUND "YES")  
