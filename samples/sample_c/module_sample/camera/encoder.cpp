@@ -151,6 +151,90 @@ static void FlushRecordFile(FILE *fp, bool doSync)
     }
 }
 bool Encoder::isCN = true;
+FreeTypeOSD Encoder::s_ftosd;
+bool Encoder::s_ftosd_inited = false;
+
+// 静态缓冲区，避免频繁内存分配
+static std::vector<unsigned char> s_tmp_rgb_buf;
+
+bool Encoder::init_ftosd()
+{
+    const char *font_dir = "/usr/share/fonts/source-han-sans-cn";
+    const char *font_candidates[] = {
+        "SourceHanSansCN-Regular.otf",
+        NULL};
+    char font_path[512] = {0};
+    for (int i = 0; font_candidates[i] != NULL; ++i)
+    {
+        snprintf(font_path, sizeof(font_path), "%s/%s", font_dir, font_candidates[i]);
+        if (access(font_path, F_OK) == 0)
+        {
+            if (s_ftosd.init(font_path, 24))
+            {
+                s_ftosd_inited = true;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// 无闪烁渲染文本到 OSD 区域（先在临时缓冲区渲染，再一次性拷贝）
+static void render_text_no_flicker(char *osd_buf, int buf_width, int buf_height, int buf_stride,
+                                   const std::string &text, int pos_x, int pos_y, unsigned char color,
+                                   int region_x, int region_w)
+{
+    int rgb_stride = buf_stride * 3;
+    int rgb_buf_size = buf_height * rgb_stride;
+    if (static_cast<int>(s_tmp_rgb_buf.size()) < rgb_buf_size)
+        s_tmp_rgb_buf.resize(rgb_buf_size);
+
+    // 临时 OSD 缓冲区
+    std::vector<char> tmp_osd(buf_height * region_w, 0);
+
+    // 渲染到临时 RGB 缓冲区
+    memset(s_tmp_rgb_buf.data(), 0, rgb_buf_size);
+    Encoder::s_ftosd.render_text(text, s_tmp_rgb_buf.data(), buf_width, buf_height, rgb_stride, pos_x, pos_y, 255, 255, 255);
+
+    // 将 RGB 转换到临时 OSD 缓冲区
+    for (int y = 0; y < buf_height; ++y)
+    {
+        for (int x = region_x; x < region_x + region_w && x < buf_width; ++x)
+        {
+            const unsigned char *pixel = s_tmp_rgb_buf.data() + y * rgb_stride + x * 3;
+            if (pixel[0] || pixel[1] || pixel[2])
+                tmp_osd[y * region_w + (x - region_x)] = color;
+        }
+    }
+
+    // 一次性拷贝到目标区域
+    for (int y = 0; y < buf_height; ++y)
+        memcpy(osd_buf + y * buf_stride + region_x, tmp_osd.data() + y * region_w, region_w);
+}
+
+// 简单渲染文本到 OSD（用于初始化，整屏渲染）
+static void render_text_to_osd(char *osd_buf, int buf_width, int buf_height, int buf_stride,
+                               const std::string &text, int pos_x, int pos_y, unsigned char color)
+{
+    int rgb_stride = buf_stride * 3;
+    int rgb_buf_size = buf_height * rgb_stride;
+    if (static_cast<int>(s_tmp_rgb_buf.size()) < rgb_buf_size)
+        s_tmp_rgb_buf.resize(rgb_buf_size);
+
+    memset(s_tmp_rgb_buf.data(), 0, rgb_buf_size);
+    Encoder::s_ftosd.render_text(text, s_tmp_rgb_buf.data(), buf_width, buf_height, rgb_stride, pos_x, pos_y, 255, 255, 255);
+
+    // 将 RGB 缓冲区中非零像素转换为 OSD 调色板索引
+    for (int y = 0; y < buf_height; ++y)
+    {
+        for (int x = 0; x < buf_width; ++x)
+        {
+            const unsigned char *pixel = s_tmp_rgb_buf.data() + y * rgb_stride + x * 3;
+            if (pixel[0] || pixel[1] || pixel[2])
+                osd_buf[y * buf_stride + x] = color;
+        }
+    }
+}
 
 RK_S32 os_get_env_u32(const char *name, RK_U32 *value, RK_U32 default_value);
 
@@ -534,24 +618,27 @@ static unsigned int fill_float_string(char *dst, unsigned int value, unsigned in
 }
 void Encoder::draw_en_osd(char *ptr, int DW_per_line)
 {
-    int i, count;
-    fill_string(ptr, "uvirsys", 0, DW_per_line);
-    ptr += DW_per_line * 1024; // 行宽mb*字高mb*256
+    // 清空缓冲区 (mb_w * mb_h * 256 = DW_per_line * 2 * 12 * 256)
+    memset(ptr, 0, DW_per_line * 2 * 12 * 256);
 
-    fill_string(ptr, "gain", 0, DW_per_line); // GAIN
-    for (i = 2; i < 5; i++)
-        fill_one_char(ptr, (unsigned char (*)[32]) & 增益[i * 4][0], i * 32, DW_per_line); // GAIN:   %
-    ptr += DW_per_line * 1024;                                                             // 下一行
+    int buf_width_px = DW_per_line * 32;
+    int buf_height_px = 32; // 每行文本高度
+    int buf_stride_px = buf_width_px;
 
-    fill_string(ptr, "cont", 0, DW_per_line);      // cont
-    fill_one_char(ptr, &计数[8], 64, DW_per_line); // cont:
-    count = fill_int_string(ptr, 0, 3 * 32, DW_per_line);
-    fill_one_char(ptr, (unsigned char (*)[32])分计数, 3 * 32 + count * 16, DW_per_line, 6); // UVPT:0%
-    ptr += DW_per_line * 1024;                                                              // 下一行
+    // 第一行：uvirsys
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "UVIRSYS", 0, 24, 3);
 
-    fill_string(ptr, "flaw", 0, DW_per_line);      // FLAW
-    fill_one_char(ptr, &缺陷[8], 64, DW_per_line); // FLAW:
-    fill_string(ptr, "none", 3 * 32, DW_per_line); // FLAW:NONE
+    // 第二行：GAIN: %
+    ptr += DW_per_line * 1024;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "GAIN：", 0, 24, 3);
+
+    // 第三行：cont: 0
+    ptr += DW_per_line * 1024;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "CONT：", 0, 24, 3);
+
+    // 第四行：FLAW: none
+    ptr += DW_per_line * 1024;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "FLAW：", 0, 24, 3);
 }
 void Encoder::draw_time_osd(MppEncOSDData *osd_data)
 {
@@ -652,42 +739,22 @@ void Encoder::draw_time_osd(MppEncOSDData *osd_data)
 
 void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
 {
-    int i;
-    int count;
+    memset(ptr, 0, DW_per_line * 2 * 12 * 256);
     int gain = 0;
-    for (i = 0; i < 4; i++) // i<字符串长度
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 紫红光电[i * 4][0], i * 32, DW_per_line);
-    }
-
-    // 增益
-    ptr += DW_per_line * 1024; // 下一行
-    for (i = 0; i < 5; i++)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 增益[i * 4][0], i * 32, DW_per_line);
-    }
-    if (gain < 100)
-        fill_int_string(ptr, gain, 6 * 16, DW_per_line);
-    else
-        fill_int_string(ptr, gain, 5 * 16, DW_per_line);
-
-    // 计数
-    ptr += DW_per_line * 1024; // 下一行
-    for (i = 0; i < 3; i++)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 计数[i * 4][0], i * 32, DW_per_line);
-    }
-
-    // 缺陷类型
+    int buf_width_px = DW_per_line * 32;
+    int buf_height_px = 32; // 每行文本高度
+    int buf_stride_px = buf_width_px;
+    // 第一行：紫红光电
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"紫红光电", 0, 24, 3);
+    // 第二行：增益
     ptr += DW_per_line * 1024;
-    for (i = 0; i < 3; i++)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32]) & 缺陷[i * 4][0], i * 32, DW_per_line);
-    }
-    for (i = 6; i <= 13; i++)
-    {
-        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], i * 16, DW_per_line);
-    }
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"增益：", 0, 24, 3);
+    // 第三行：计数
+    ptr += DW_per_line * 1024;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"计数：", 0, 24, 3);
+    // 第四行：缺陷
+    ptr += DW_per_line * 1024;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"缺陷：", 0, 24, 3);
 }
 RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt)
 {
@@ -939,6 +1006,7 @@ MPP_RET Encoder::init(pOutput_func output_func)
         USER_LOG_ERROR("mpp_frame_init failed\n");
         goto OUT;
     }
+    init_ftosd();
     if (!osd_data.num_region)
         gen_osd_data(&osd_data, buf_grp);
     mpp_frame_set_width(frame, args.width);
@@ -1748,75 +1816,58 @@ void *mpp_osal_calloc(size_t size)
 
 void Encoder::modify_osd_en_flaw_info(MppEncOSDData *osd_data, int level)
 {
-    int i;
     MppBuffer buf = osd_data->buf;
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 3;
+    ptr += mb_w * 2 * 256 * 3; // 跳到缺陷行
+
+    int buf_width_px = mb_w * 16;
+    int buf_height_px = 32;
+    int buf_stride_px = buf_width_px;
+
+    std::string text;
+    unsigned char color = 3;
     switch (level)
     {
-    case 0: // FINE index=3*32
-        fill_string(ptr, "fine", 3 * 32, mb_w / 2, 2);
-        for (i = 0; i < 4; i++) // 清除上一帧残余数据
-        {
-            fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 5 * 32 + i * 16, mb_w / 2, 2);
-        }
-        break;
-    case 1: // GENERAL
-        fill_string(ptr, "general", 3 * 32, mb_w / 2, 3);
-        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 32 * 3 + 16 * 7, mb_w / 2, 3);
-        break;
-    case 2: // SERIOUS
-        fill_string(ptr, "serious", 3 * 32, mb_w / 2, 4);
-        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 32 * 3 + 16 * 7, mb_w / 2, 4);
-        break;
-    case 3: // CRITICAL
-        fill_string(ptr, "critical", 3 * 32, mb_w / 2, 5);
-        break;
-    default:
-        break;
+    case 0: text = "FINE"; color = 2; break;
+    case 1: text = "LD L1"; color = 3; break;
+    case 2: text = "MD L2"; color = 4; break;
+    case 3: text = "HD L3"; color = 5; break;
+    default: return;
     }
+
+    int region_x = 3 * 32 - 10;
+    int region_w = 8 * 16;
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, text, region_x, 24, color, region_x, region_w);
 }
 
 void Encoder::modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level)
 {
-    int i;
     MppBuffer buf = osd_data->buf;
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 3;
+    ptr += mb_w * 2 * 256 * 3; // 跳到缺陷行
+
+    int buf_width_px = mb_w * 16;
+    int buf_height_px = 32;
+    int buf_stride_px = buf_width_px;
+
+    std::string text;
+    unsigned char color = 3;
     switch (level)
     {
-    case 0: // 暂无
-        for (i = 3; i < 5; i++)
-        {
-            fill_one_char(ptr, (unsigned char (*)[32]) & 暂无[(i - 3) * 4][0], i * 32, mb_w / 2, 2);
-        }
-        break;
-    case 1: // 一般
-        for (i = 3; i < 5; i++)
-        {
-            fill_one_char(ptr, (unsigned char (*)[32]) & 一般[(i - 3) * 4][0], i * 32, mb_w / 2, 3);
-        }
-        break;
-    case 2: // 严重
-        for (i = 3; i < 5; i++)
-        {
-            fill_one_char(ptr, (unsigned char (*)[32]) & 严重[(i - 3) * 4][0], i * 32, mb_w / 2, 4);
-        }
-        break;
-    case 3: // 危急
-        for (i = 3; i < 5; i++)
-        {
-            fill_one_char(ptr, (unsigned char (*)[32]) & 危急[(i - 3) * 4][0], i * 32, mb_w / 2, 5);
-        }
-        break;
-
-    default:
-        break;
+    case 0: text = "暂无"; color = 2; break;
+    case 1: text = "一般"; color = 3; break;
+    case 2: text = "严重"; color = 4; break;
+    case 3: text = "危急"; color = 5; break;
+    default: return;
     }
+
+    int region_x = 3 * 32 - 10;
+    int region_w = 8 * 16;
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, text, region_x, 24, color, region_x, region_w);
 }
 
 void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
@@ -1826,22 +1877,18 @@ void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
     ptr += mb_w * 2 * 256 * 1; // 增益行
-    if (value < 100)
-    {
-        if (value > 9)
-        {
-            fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 5 * 16, mb_w / 2);
-            fill_int_string(ptr, value, 6 * 16, mb_w / 2);
-        }
-        else
-        {
-            fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 5 * 16, mb_w / 2);
-            fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], 6 * 16, mb_w / 2);
-            fill_int_string(ptr, value, 7 * 16, mb_w / 2);
-        }
-    }
-    else
-        fill_int_string(ptr, value, 5 * 16, mb_w / 2);
+
+    int buf_width_px = mb_w * 16;
+    int buf_height_px = 32;
+    int buf_stride_px = buf_width_px;
+
+    char buffer[64];
+    sprintf(buffer, "%d%%", value);
+    int pos_x = 32 * 3 - 10;
+
+    int region_x = pos_x - 10;
+    int region_w = 5 * 16;
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, pos_x, 24, 3, region_x, region_w);
 }
 
 void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value, bool period)
@@ -1849,26 +1896,21 @@ void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value,
     MppBuffer buf = osd_data->buf;
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
-    static int count_unint = 0; //
-    int c;
-    unsigned int index = 3 * 32;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
     ptr += mb_w * 2 * 256 * 2; // 光子计数行
+
     if (value > 1000000)
         return;
-    c = fill_int_string(ptr, value, index, mb_w / 2);
-    index += 16 * c;
-    if (!period)
-    {
-        fill_one_char(ptr, (unsigned char (*)[32])秒计数, index, mb_w / 2);
-    }
-    else
-    {
-        fill_one_char(ptr, (unsigned char (*)[32])分计数, index, mb_w / 2);
-    }
-    index += 32;
-    for (int i = c + 2; i < 10; i++, index += 16) // 清除上一帧残余数据
-    {
-        fill_half_char(ptr, (unsigned char (*)[32]) & NUM[2 * 11][0], index, mb_w / 2);
-    }
+
+    int buf_width_px = mb_w * 16;
+    int buf_height_px = 32;
+    int buf_stride_px = buf_width_px;
+
+    char buffer[64];
+    const char* suffix = period ? "M" : "S";
+    sprintf(buffer, "%d/%s", value, suffix);
+
+    int region_x = 3 * 32 - 10;
+    int region_w = 10 * 16;
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, region_x, 24, 3, region_x, region_w);
 }

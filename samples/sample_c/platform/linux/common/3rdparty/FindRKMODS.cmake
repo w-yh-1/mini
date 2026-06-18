@@ -24,10 +24,13 @@ IF(NOT RGA_HEAD_DIR)
     message(FATAL_ERROR "rga headers not found!")
 ENDIF()
 
-FIND_PATH(JSONCPP_HEAD_DIR jsoncpp
+FIND_PATH(JSONCPP_HEAD_DIR json.h
     PATHS
+    ${SYSROOT_PATH}/include
     /usr/local/include
-    /usr/include)
+    /usr/include
+    PATH_SUFFIXES
+    json)
 
 IF(NOT JSONCPP_HEAD_DIR)
     message(FATAL_ERROR "jsoncpp headers not found!")

@@ -482,84 +482,84 @@
         "widget_name": "Photon color",
         "list_item": [
           {
-            "item_name": "1",
+            "item_name": "White",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "2",
+            "item_name": "Red",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "3",
+            "item_name": "Green",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "4",
+            "item_name": "Blue",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "5",
+            "item_name": "Yellow",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "6",
+            "item_name": "Cyan",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "7",
+            "item_name": "Magenta",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "8",
+            "item_name": "Silver",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "9",
+            "item_name": "Gray",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "10",
+            "item_name": "Chestnut",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "11",
+            "item_name": "Olive",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"
             }
           },
           {
-            "item_name": "12",
+            "item_name": "Purple",
             "icon_file_set": {
               "icon_file_name_selected": "icon_button2.png",
               "icon_file_name_unselected": "icon_button2.png"

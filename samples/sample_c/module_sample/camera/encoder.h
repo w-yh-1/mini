@@ -8,6 +8,7 @@
 #include "dji_logger.h"
 #include <pthread.h>
 #include <vector>
+#include "free_type_osd.h"
 #define CODEC_TYPE MPP_VIDEO_CodingAVC
 #define MPP_ALIGN(x, a) (((x) + (a) - 1) & ~((a) - 1))
 #define mpp_env_get_u32(name, value, default_value) os_get_env_u32(name, value, default_value)
@@ -157,6 +158,10 @@ public:
     MppEncOSDData osd_data;
     rga_buffer_t *input_buf;
     static bool isCN;
+    static FreeTypeOSD s_ftosd;
+    static bool s_ftosd_inited;
+
+    static bool init_ftosd();
     
     static MPP_RET gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group);
     static void switch_language(MppEncOSDData *osd_data, bool is_CN);
