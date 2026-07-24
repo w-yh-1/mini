@@ -169,8 +169,8 @@ public:
     static void modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level);
     static void modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value);
     static void modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value, bool period);
-    static void draw_cn_osd(char *ptr, int DW_per_line = 8);
-    static void draw_en_osd(char *ptr, int DW_per_line = 8);
+    static void draw_cn_osd(char *ptr, int DW_per_line = 12);
+    static void draw_en_osd(char *ptr, int DW_per_line = 12);
     static void draw_time_osd(MppEncOSDData *osd_data);
     static void (*modify_osd_flaw_info)(MppEncOSDData *osd_data, int level);
 };

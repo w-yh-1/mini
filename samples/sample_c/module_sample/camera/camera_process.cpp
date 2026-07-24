@@ -45,7 +45,7 @@ static std::atomic_uint32_t uv_gain_display_raw{0};
 static FreeTypeOSD g_ftosd;
 static bool g_ftosd_inited = false;
 // OSD 语言开关：false=英文，true=中文（同时作用于录像 OSD 与快照 OSD）
-static std::atomic_bool g_osd_use_chinese{false};
+static std::atomic_bool g_osd_use_chinese{true};
 static void uv_cb_func(int et, int status, uint32_t value, void *user);
 static bool init_UV_async(uv_async_t **uv_ctx);
 static bool deinit_UV_async(uv_async_t *uv_ctx);

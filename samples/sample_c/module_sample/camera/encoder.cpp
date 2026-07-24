@@ -169,7 +169,7 @@ bool Encoder::init_ftosd()
         snprintf(font_path, sizeof(font_path), "%s/%s", font_dir, font_candidates[i]);
         if (access(font_path, F_OK) == 0)
         {
-            if (s_ftosd.init(font_path, 24))
+            if (s_ftosd.init(font_path, 32))
             {
                 s_ftosd_inited = true;
                 return true;
@@ -618,27 +618,27 @@ static unsigned int fill_float_string(char *dst, unsigned int value, unsigned in
 }
 void Encoder::draw_en_osd(char *ptr, int DW_per_line)
 {
-    // 清空缓冲区 (mb_w * mb_h * 256 = DW_per_line * 2 * 12 * 256)
-    memset(ptr, 0, DW_per_line * 2 * 12 * 256);
+    // 清空缓冲区 (mb_w * mb_h * 320 = DW_per_line * 2 * 12 * 320)
+    memset(ptr, 0, DW_per_line * 2 * 12 * 320);
 
     int buf_width_px = DW_per_line * 32;
-    int buf_height_px = 32; // 每行文本高度
+    int buf_height_px = 40; // 每行文本高度
     int buf_stride_px = buf_width_px;
 
     // 第一行：uvirsys
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "UVIRSYS", 0, 24, 3);
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "UVIRSYS", 0, 32, 1);
 
     // 第二行：GAIN: %
-    ptr += DW_per_line * 1024;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "GAIN：", 0, 24, 3);
+    ptr += DW_per_line * 1280;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "GAIN:", 0, 32, 1);
 
     // 第三行：cont: 0
-    ptr += DW_per_line * 1024;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "CONT：", 0, 24, 3);
+    ptr += DW_per_line * 1280;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "CONT:", 0, 32, 1);
 
     // 第四行：FLAW: none
-    ptr += DW_per_line * 1024;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "FLAW：", 0, 24, 3);
+    ptr += DW_per_line * 1280;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "FLAW:", 0, 32, 1);
 }
 void Encoder::draw_time_osd(MppEncOSDData *osd_data)
 {
@@ -739,22 +739,22 @@ void Encoder::draw_time_osd(MppEncOSDData *osd_data)
 
 void Encoder::draw_cn_osd(char *ptr, int DW_per_line)
 {
-    memset(ptr, 0, DW_per_line * 2 * 12 * 256);
+    memset(ptr, 0, DW_per_line * 2 * 12 * 320);
     int gain = 0;
     int buf_width_px = DW_per_line * 32;
-    int buf_height_px = 32; // 每行文本高度
+    int buf_height_px = 40; // 每行文本高度
     int buf_stride_px = buf_width_px;
     // 第一行：紫红光电
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"紫红光电", 0, 24, 3);
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"紫红光电", 0, 32, 1);
     // 第二行：增益
-    ptr += DW_per_line * 1024;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"增益：", 0, 24, 3);
+    ptr += DW_per_line * 1280;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"增益：", 0, 32, 1);
     // 第三行：计数
-    ptr += DW_per_line * 1024;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"计数：", 0, 24, 3);
+    ptr += DW_per_line * 1280;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"计数：", 0, 32, 1);
     // 第四行：缺陷
-    ptr += DW_per_line * 1024;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"缺陷：", 0, 24, 3);
+    ptr += DW_per_line * 1280;
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px,"缺陷：", 0, 32, 1);
 }
 RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt)
 {
@@ -835,8 +835,8 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
 {
     MppEncOSDRegion *region = osd_data->region;
     MppBuffer buf = osd_data->buf;
-    int DW_per_line = 8;
-    RK_U32 mb_w = DW_per_line * 2; // 每行8个字，每字占2mb（32byte）
+    int DW_per_line = 12;
+    RK_U32 mb_w = DW_per_line * 2; // 每行12个字，每字占2mb（32byte）
     RK_U32 mb_h = 2 * 6;           // 每个字高32p 模式，光子数，距离，增益，缺陷,共5行
     RK_U32 buf_size = 0;
     osd_data->num_region = 1;
@@ -853,9 +853,9 @@ MPP_RET Encoder::gen_osd_data(MppEncOSDData *osd_data, MppBufferGroup group)
     region[0].buf_offset = 0;
     region[0].enable = 1;
     /* create buffer and write osd index data */
-    if (buf_size < mb_w * mb_h * 256)
+    if (buf_size < mb_w * mb_h * 320)
     {
-        buf_size = mb_w * mb_h * 256; //
+        buf_size = mb_w * mb_h * 320; //
         if (buf)
             mpp_buffer_put(buf);
 
@@ -1820,10 +1820,10 @@ void Encoder::modify_osd_en_flaw_info(MppEncOSDData *osd_data, int level)
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 3; // 跳到缺陷行
+    ptr += mb_w * 2 * 320 * 3; // 跳到缺陷行
 
     int buf_width_px = mb_w * 16;
-    int buf_height_px = 32;
+    int buf_height_px = 40;
     int buf_stride_px = buf_width_px;
 
     std::string text;
@@ -1837,9 +1837,9 @@ void Encoder::modify_osd_en_flaw_info(MppEncOSDData *osd_data, int level)
     default: return;
     }
 
-    int region_x = 3 * 32 - 10;
+    int region_x = 4 * 32 - 10;
     int region_w = 8 * 16;
-    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, text, region_x, 24, color, region_x, region_w);
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, text, region_x, 32, color, region_x, region_w);
 }
 
 void Encoder::modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level)
@@ -1848,10 +1848,10 @@ void Encoder::modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level)
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 3; // 跳到缺陷行
+    ptr += mb_w * 2 * 320 * 3; // 跳到缺陷行
 
     int buf_width_px = mb_w * 16;
-    int buf_height_px = 32;
+    int buf_height_px = 40;
     int buf_stride_px = buf_width_px;
 
     std::string text;
@@ -1867,7 +1867,7 @@ void Encoder::modify_osd_cn_flaw_info(MppEncOSDData *osd_data, int level)
 
     int region_x = 3 * 32 - 10;
     int region_w = 8 * 16;
-    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, text, region_x, 24, color, region_x, region_w);
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, text, region_x, 32, color, region_x, region_w);
 }
 
 void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
@@ -1876,19 +1876,21 @@ void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 1; // 增益行
+    ptr += mb_w * 2 * 320 * 1; // 增益行
 
     int buf_width_px = mb_w * 16;
-    int buf_height_px = 32;
+    int buf_height_px = 40;
     int buf_stride_px = buf_width_px;
 
     char buffer[64];
     sprintf(buffer, "%d%%", value);
-    int pos_x = 32 * 3 - 10;
+
+    // 英文模式下往右移动
+    int pos_x = isCN ? (32 * 3 - 10) : (4 * 32 - 10);
 
     int region_x = pos_x - 10;
     int region_w = 5 * 16;
-    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, pos_x, 24, 3, region_x, region_w);
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, pos_x, 32, 1, region_x, region_w);
 }
 
 void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value, bool period)
@@ -1897,20 +1899,21 @@ void Encoder::modify_osd_count_data(MppEncOSDData *osd_data, unsigned int value,
     MppEncOSDRegion *region = osd_data->region;
     RK_U32 mb_w = region->num_mb_x;
     char *ptr = (char *)mpp_buffer_get_ptr(buf);
-    ptr += mb_w * 2 * 256 * 2; // 光子计数行
+    ptr += mb_w * 2 * 320 * 2; // 光子计数行
 
     if (value > 1000000)
         return;
 
     int buf_width_px = mb_w * 16;
-    int buf_height_px = 32;
+    int buf_height_px = 40;
     int buf_stride_px = buf_width_px;
 
     char buffer[64];
     const char* suffix = period ? "M" : "S";
     sprintf(buffer, "%d/%s", value, suffix);
 
-    int region_x = 3 * 32 - 10;
+    // 英文模式下往右移动
+    int region_x = isCN ? (3 * 32 - 10) : (4 * 32 - 10);
     int region_w = 10 * 16;
-    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, region_x, 24, 3, region_x, region_w);
+    render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, region_x, 32, 1, region_x, region_w);
 }
