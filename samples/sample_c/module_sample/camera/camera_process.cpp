@@ -463,7 +463,7 @@ bool camera_process::init(pOutput_func output_func)
         }
     }
 
-    set_uv_gain_raw(60); // 默认值（显示与用户一致）
+    set_uv_gain_raw(50); // 默认值（显示与用户一致）
 
     load_correction_factors(CORRECTION_FACTOR_CONFIG_FILE);
     update_rects(0);
