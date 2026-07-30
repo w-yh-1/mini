@@ -1889,7 +1889,7 @@ void Encoder::modify_osd_gain_data(MppEncOSDData *osd_data, unsigned int value)
     int pos_x = isCN ? (32 * 3 - 10) : (4 * 32 - 10);
 
     int region_x = pos_x - 10;
-    int region_w = 5 * 16;
+    int region_w = 7 * 16;  
     render_text_no_flicker(ptr, buf_width_px, buf_height_px, buf_stride_px, buffer, pos_x, 32, 1, region_x, region_w);
 }
 
