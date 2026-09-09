@@ -628,17 +628,17 @@ void Encoder::draw_en_osd(char *ptr, int DW_per_line)
     // 第一行：uvirsys
     render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "UVIRSYS", 0, 32, 1);
 
-    // 第二行：GAIN: %
+    // 第二行：Gain: %
     ptr += DW_per_line * 1280;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "GAIN:", 0, 32, 1);
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "Gain：", 0, 32, 1);
 
-    // 第三行：cont: 0
+    // 第三行：Count: 0
     ptr += DW_per_line * 1280;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "CONT:", 0, 32, 1);
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "Count：", 0, 32, 1);
 
-    // 第四行：FLAW: none
+    // 第四行：LVL: none
     ptr += DW_per_line * 1280;
-    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "FLAW:", 0, 32, 1);
+    render_text_to_osd(ptr, buf_width_px, buf_height_px, buf_stride_px, "LVL：", 0, 32, 1);
 }
 void Encoder::draw_time_osd(MppEncOSDData *osd_data)
 {

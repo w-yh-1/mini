@@ -14,7 +14,7 @@ public:
     bool init(const char *font_path, int font_size);
     void deinit();
     bool render_text(const std::string &text, unsigned char *buffer, int buf_width, int buf_height, int buf_stride,
-                     int pos_x, int pos_y, unsigned char r, unsigned char g, unsigned char b);
+                     int pos_x, int pos_y, unsigned char r, unsigned char g, unsigned char b, bool bold = false);
 private:
     struct GlyphBitmap
     {
@@ -31,7 +31,7 @@ private:
     std::unordered_map<FT_UInt, GlyphBitmap> glyph_cache;
 
     // Load from cache if hit; otherwise render and store.
-    const GlyphBitmap *get_cached_glyph(uint32_t cp);
+    const GlyphBitmap *get_cached_glyph(uint32_t cp, bool bold = false);
 
     FT_Library ft_library;
     FT_Face ft_face;

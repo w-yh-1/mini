@@ -161,7 +161,7 @@ void *camera_process::snapshot_worker(void *arg)
                     USER_LOG_ERROR("snapshot invalid pitch=%d, fallback row_bytes=%d\n", stride_bytes, row_bytes);
                     stride_bytes = row_bytes;
                 }
-                // 在保存前叠加 OSD（时间、增益、光子数），如果 FreeType 初始化成功
+                // 在保存前叠加 OSD（与录像 OSD 一致：公司名+时间、增益、计数、缺陷），如果 FreeType 初始化成功
                 if (g_ftosd_inited)
                 {
                     char tb[64];
@@ -170,32 +170,71 @@ void *camera_process::snapshot_worker(void *arg)
                     strftime(tb, sizeof(tb), "%Y-%m-%d %H:%M:%S", &tmv);
                     const bool use_cn = g_osd_use_chinese.load(std::memory_order_acquire);
                     char s0[128];
-                    char s1[128];
-                    char s2[64];
+                    char gain_val[16], count_val[16], flaw_val[16];
 
                     uint32_t gain_show = uv_gain_display_raw.load(std::memory_order_acquire);
+                    int flaw_level = (uv_photons > 8000) ? 3 :
+                                     (uv_photons > 1000) ? 2 :
+                                     (uv_photons > 200)  ? 1 : 0;
+
                     if (use_cn)
                     {
                         snprintf(s0, sizeof(s0), "紫红光电");
-                        snprintf(s1, sizeof(s1), "时间: %s", tb);
-                        snprintf(s2, sizeof(s2), "增益: %u  光子数: %u", gain_show, (unsigned)uv_photons);
+                        snprintf(gain_val, sizeof(gain_val), "%u%%", gain_show);
+                        snprintf(count_val, sizeof(count_val), "%u/M", (unsigned)uv_photons);
+                        switch (flaw_level)
+                        {
+                        case 0: snprintf(flaw_val, sizeof(flaw_val), "暂无"); break;
+                        case 1: snprintf(flaw_val, sizeof(flaw_val), "一般"); break;
+                        case 2: snprintf(flaw_val, sizeof(flaw_val), "严重"); break;
+                        case 3: snprintf(flaw_val, sizeof(flaw_val), "危急"); break;
+                        default: snprintf(flaw_val, sizeof(flaw_val), "暂无"); break;
+                        }
                     }
                     else
                     {
                         snprintf(s0, sizeof(s0), "UVIRSYS");
-                        snprintf(s1, sizeof(s1), "Time: %s", tb);
-                        snprintf(s2, sizeof(s2), "Gain: %u  Photons: %u", gain_show, (unsigned)uv_photons);
+                        snprintf(gain_val, sizeof(gain_val), "%u%%", gain_show);
+                        snprintf(count_val, sizeof(count_val), "%u/M", (unsigned)uv_photons);
+                        switch (flaw_level)
+                        {
+                        case 0: snprintf(flaw_val, sizeof(flaw_val), "FINE"); break;
+                        case 1: snprintf(flaw_val, sizeof(flaw_val), "LD L1"); break;
+                        case 2: snprintf(flaw_val, sizeof(flaw_val), "MD L2"); break;
+                        case 3: snprintf(flaw_val, sizeof(flaw_val), "HD L3"); break;
+                        default: snprintf(flaw_val, sizeof(flaw_val), "FINE"); break;
+                        }
                     }
+
                     // 基线位置：左上角，留 10px 边距
-                    int px = 10;
-                    int py = 10 + 20; // baseline y，字体大小约24，取20作为近似
-                    g_ftosd.render_text(s0, base, width, height, stride_bytes, px, py, 255, 255, 255);
-                    // 第二行
-                    py += 24 + 4;
-                    g_ftosd.render_text(s1, base, width, height, stride_bytes, px, py, 255, 255, 255);
-                    // 第三行
-                    py += 24 + 4;
-                    g_ftosd.render_text(s2, base, width, height, stride_bytes, px, py, 255, 255, 255);
+                    int px_label = 50;
+                    int py = 10 + 60;
+
+                    // 动态值对齐位置
+                    int px_value = use_cn ? 165 : 195;
+
+                    // 第一行：公司名
+                    g_ftosd.render_text(s0, base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
+
+                    // 第二行：时间
+                    py += 42 + 4;
+                    g_ftosd.render_text(use_cn ? "时间：" : "Time：", base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
+                    g_ftosd.render_text(tb, base, width, height, stride_bytes, px_value, py, 255, 255, 255, true);
+
+                    // 第三行：增益标签 + 值
+                    py += 42 + 4;
+                    g_ftosd.render_text(use_cn ? "增益：" : "Gain：", base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
+                    g_ftosd.render_text(gain_val, base, width, height, stride_bytes, px_value, py, 255, 255, 255, true);
+
+                    // 第四行：计数标签 + 值
+                    py += 42 + 4;
+                    g_ftosd.render_text(use_cn ? "计数：" : "Count：", base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
+                    g_ftosd.render_text(count_val, base, width, height, stride_bytes, px_value, py, 255, 255, 255, true);
+
+                    // 第五行：缺陷标签 + 值
+                    py += 42 + 4;
+                    g_ftosd.render_text(use_cn ? "缺陷：" : "LVL：", base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
+                    g_ftosd.render_text(flaw_val, base, width, height, stride_bytes, px_value, py, 255, 255, 255, true);
                 }
                 int rc = 0;
                 if (stride_bytes == row_bytes)
@@ -450,7 +489,7 @@ bool camera_process::init(pOutput_func output_func)
         snprintf(font_path, sizeof(font_path), "%s/%s", font_dir, font_candidates[i]);
         if (access(font_path, F_OK) == 0)
         {
-            if (g_ftosd.init(font_path, 24))
+            if (g_ftosd.init(font_path, 42))
             {
                 g_ftosd_inited = true;
                 USER_LOG_INFO("FreeType OSD initialized with %s\n", font_path);

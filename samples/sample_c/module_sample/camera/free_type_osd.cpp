@@ -1,4 +1,5 @@
 #include"free_type_osd.h"
+#include FT_OUTLINE_H
 #include <iostream>
 #include <vector>
 #include <cstring>
@@ -85,7 +86,7 @@ void FreeTypeOSD::deinit()
     }
 }
 bool FreeTypeOSD::render_text(const std::string &text, unsigned char *buffer, int buf_width, int buf_height, int buf_stride,
-                             int pos_x, int pos_y, unsigned char r, unsigned char g, unsigned char b)
+                             int pos_x, int pos_y, unsigned char r, unsigned char g, unsigned char b, bool bold)
 {
     if (!ft_face || !buffer)
         return false;
@@ -108,7 +109,7 @@ bool FreeTypeOSD::render_text(const std::string &text, unsigned char *buffer, in
             x += delta.x >> 6; // 26.6 固定小数转整数
         }
 
-        const GlyphBitmap *gb = get_cached_glyph(cp);
+        const GlyphBitmap *gb = get_cached_glyph(cp, bold);
         if (!gb)
         {
             prev_index = 0;
@@ -144,7 +145,7 @@ bool FreeTypeOSD::render_text(const std::string &text, unsigned char *buffer, in
 }
 
 // 返回缓存中的 glyph；若未命中则渲染并插入缓存。
-const FreeTypeOSD::GlyphBitmap *FreeTypeOSD::get_cached_glyph(uint32_t cp)
+const FreeTypeOSD::GlyphBitmap *FreeTypeOSD::get_cached_glyph(uint32_t cp, bool bold)
 {
     if (!ft_face)
         return nullptr;
@@ -153,9 +154,54 @@ const FreeTypeOSD::GlyphBitmap *FreeTypeOSD::get_cached_glyph(uint32_t cp)
     if (!glyph_index)
         return nullptr;
 
-    auto it = glyph_cache.find(glyph_index);
+    // bold glyph 使用偏移 key 避免与普通 glyph 冲突
+    FT_UInt cache_key = bold ? (glyph_index + 1000000u) : glyph_index;
+
+    auto it = glyph_cache.find(cache_key);
     if (it != glyph_cache.end())
         return &it->second;
+
+    // 加粗时先加载轮廓（不渲染），embolden 后再渲染
+    if (bold)
+    {
+        if (FT_Load_Char(ft_face, cp, FT_LOAD_DEFAULT))
+            return nullptr;
+        FT_Glyph glyph_obj;
+        if (FT_Get_Glyph(ft_face->glyph, &glyph_obj))
+            return nullptr;
+        if (glyph_obj->format != FT_GLYPH_FORMAT_OUTLINE)
+        {
+            FT_Done_Glyph(glyph_obj);
+            return nullptr;
+        }
+        FT_OutlineGlyph outline_glyph = (FT_OutlineGlyph)glyph_obj;
+        FT_Outline_Embolden(&outline_glyph->outline, 1 << 6);
+        FT_Glyph_To_Bitmap(&glyph_obj, FT_RENDER_MODE_NORMAL, nullptr, 1);
+        FT_BitmapGlyph bmp_glyph = (FT_BitmapGlyph)glyph_obj;
+
+        GlyphBitmap gb;
+        gb.width = bmp_glyph->bitmap.width;
+        gb.height = bmp_glyph->bitmap.rows;
+        gb.left = bmp_glyph->left;
+        gb.top = bmp_glyph->top;
+        gb.advance = (ft_face->glyph->advance.x >> 6);
+        gb.pitch = bmp_glyph->bitmap.pitch;
+
+        if (gb.width > 0 && gb.height > 0 && bmp_glyph->bitmap.buffer)
+        {
+            gb.buf.resize(gb.height * gb.pitch);
+            for (int row = 0; row < gb.height; ++row)
+            {
+                const unsigned char *src = bmp_glyph->bitmap.buffer + row * gb.pitch;
+                unsigned char *dst = gb.buf.data() + row * gb.pitch;
+                memcpy(dst, src, gb.pitch);
+            }
+        }
+        FT_Done_Glyph(glyph_obj);
+
+        auto inserted = glyph_cache.emplace(cache_key, std::move(gb));
+        return inserted.first != glyph_cache.end() ? &inserted.first->second : nullptr;
+    }
 
     if (FT_Load_Char(ft_face, cp, FT_LOAD_RENDER))
     {
