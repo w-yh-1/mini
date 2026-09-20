@@ -35,7 +35,6 @@ static IM_STATUS rga_imcolorkey(const rga_buffer_t src,
                                 int mode,
                                 int sync = 1,
                                 int *release_fence_fd = NULL);
-
 static uv_async_t *uv_ctx = NULL;
 static uint32_t uv_photons = 0;
 static uint32_t uv_gain = 0;
@@ -55,8 +54,8 @@ static int save_image_as_png_stride(const char *filename, const uint8_t *image_d
 static bool ensure_dir_exists(const char *dir);
 static std::string build_unique_png_path(const char *dir, time_t snapshot_time);
 static void ensure_process_timezone();
-static constexpr int VL_BASE_CROP_WIDTH = 2560;
-static constexpr int VL_BASE_CROP_HEIGHT = 1440;
+static constexpr int VL_BASE_CROP_WIDTH = 3840;
+static constexpr int VL_BASE_CROP_HEIGHT = 2160;
 static inline int align_even_floor(int value)
 {
     return value & ~1;
@@ -628,22 +627,23 @@ void camera_process::update_rects(int distance)
     const int residual_x_offset = x_offset - (int)lroundf((float)actual_vl_src_shift_x * (float)enc_w / (float)vl_width);
     const int residual_y_offset = y_offset - (int)lroundf((float)actual_vl_src_shift_y * (float)enc_h / (float)vl_height);
 
-    // 理想 UV 目标区域：仅补 VL 没吃掉的残差。
-    int temp_dst_width = 1920 * scaleFactor * zoom_ratio;
-    int temp_dst_height = 1080 * scaleFactor * zoom_ratio;
-    int temp_dst_x = (1920 - temp_dst_width) / 2 + residual_x_offset;
-    int temp_dst_y = (1080 - temp_dst_height) / 2 + residual_y_offset;
+    const int uv_cam_w = (int)mUvCamWidth;
+    const int uv_cam_h = (int)mUvCamHeight;
+    int temp_dst_width = uv_cam_w * scaleFactor * zoom_ratio;
+    int temp_dst_height = uv_cam_h * scaleFactor * zoom_ratio;
+    int temp_dst_x = (enc_w - temp_dst_width) / 2 + residual_x_offset;
+    int temp_dst_y = (enc_h - temp_dst_height) / 2 + residual_y_offset;
 
     // 实际 UV 目标区域
     mUvDstRect.x = std::max(0, temp_dst_x);
     mUvDstRect.y = std::max(0, temp_dst_y);
-    mUvDstRect.width = std::min(1920, temp_dst_width + temp_dst_x) - mUvDstRect.x;
-    mUvDstRect.height = std::min(1080, temp_dst_height + temp_dst_y) - mUvDstRect.y;
+    mUvDstRect.width = std::min(enc_w, temp_dst_width + temp_dst_x) - mUvDstRect.x;
+    mUvDstRect.height = std::min(enc_h, temp_dst_height + temp_dst_y) - mUvDstRect.y;
 
-    mUvSrcRect.x = temp_dst_x < 0 ? 1280 * (-temp_dst_x) / temp_dst_width : 0;
-    mUvSrcRect.y = temp_dst_y < 0 ? 720 * (-temp_dst_y) / temp_dst_height : 0;
-    mUvSrcRect.width = 1280 * mUvDstRect.width / temp_dst_width;
-    mUvSrcRect.height = 720 * mUvDstRect.height / temp_dst_height;
+    mUvSrcRect.x = temp_dst_x < 0 ? uv_cam_w * (-temp_dst_x) / temp_dst_width : 0;
+    mUvSrcRect.y = temp_dst_y < 0 ? uv_cam_h * (-temp_dst_y) / temp_dst_height : 0;
+    mUvSrcRect.width = uv_cam_w * mUvDstRect.width / temp_dst_width;
+    mUvSrcRect.height = uv_cam_h * mUvDstRect.height / temp_dst_height;
     return;
 }
 

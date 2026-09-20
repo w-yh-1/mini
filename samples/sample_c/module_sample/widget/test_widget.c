@@ -292,7 +292,7 @@ static T_DjiReturnCode DjiTestWidget_SetWidgetValue(E_DjiWidgetType widgetType, 
         camera_set_vert_ang_correction(value);
         break;
     case 6:
-        camera_set_scale_factor((float)value / 10.0f);
+        camera_set_scale_factor((float)value / 100.0f);
         break;
     case 7:
         if (value == 1)
