@@ -98,6 +98,8 @@ extern "C"
     void sample_set_focus_semiautomode(const CamSource *ctx);
     void oneshot_focus(const CamSource *ctx);
     void oneshot_focus_auto();
+    const struct rk_aiq_sys_ctx_s *cam_source_aiq(const CamSource *ctx);
+    int cam_source_isp_size(const CamSource *ctx, int *w, int *h);
 }
 
-#endif 
+#endif

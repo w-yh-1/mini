@@ -178,6 +178,7 @@ extern int take_snapshot_auto();
 extern void camera_set_zoom_ratio(float v);
 
 extern void oneshot_focus_auto();
+extern void camera_tap_aeaf(float nx, float ny);
 /* Private functions definition-----------------------------------------------*/
 static T_DjiReturnCode GetSystemState(T_DjiCameraSystemState *systemState)
 {
@@ -634,7 +635,7 @@ static T_DjiReturnCode SetFocusTarget(T_DjiCameraPointInScreen target)
     USER_LOG_INFO("set focus target x:%.2f y:%.2f", target.focusX, target.focusY);
     memcpy(&s_cameraFocusTarget, &target, sizeof(T_DjiCameraPointInScreen));
 
-    oneshot_focus_auto();
+    camera_tap_aeaf(target.focusX, target.focusY);
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }

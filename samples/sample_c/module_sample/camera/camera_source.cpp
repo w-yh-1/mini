@@ -1049,3 +1049,23 @@ void oneshot_focus(const CamSource *ctx)
     rk_aiq_uapi2_oneshotFocus(ctx->isp_ctx->aiq_ctx);
     printf("oneshotFocus\n");
 }
+
+const struct rk_aiq_sys_ctx_s *cam_source_aiq(const CamSource *ctx)
+{
+    if (!ctx || !ctx->isp_ctx)
+        return NULL;
+    return ctx->isp_ctx->aiq_ctx;
+}
+
+int cam_source_isp_size(const CamSource *ctx, int *w, int *h)
+{
+    if (!ctx || !ctx->isp_ctx || !w || !h)
+        return -1;
+    *w = (int)ctx->isp_ctx->width;
+    *h = (int)ctx->isp_ctx->height;
+    if (*w <= 0)
+        *w = 3840;
+    if (*h <= 0)
+        *h = 2160;
+    return 0;
+}

@@ -352,6 +352,7 @@ void *camera_process::camera_task(void *arg)
             }
             rga_improcess(*camera_frame_to_RgaBuffer(processor->mCamSource, frame_id), processor->mTempBuf.rga_buf, processor->mVlSrcRect);
             camera_source_put_frame(processor->mCamSource, frame_id);
+            processor->mTapAeAf.poll();
             // Process UV camera
             uv_frame_id = camera_source_get_frame(processor->mUvCamSource);
             if (uv_frame_id < 0)
@@ -449,6 +450,10 @@ bool camera_process::init(pOutput_func output_func)
         }
     }
     sample_set_focus_semiautomode(mCamSource);
+
+    mTapAeAf.set_source(mCamSource);
+    mTapAeAf.set_crop(0, 0, (int)mCamWidth, (int)mCamHeight,
+                      (int)mCamWidth, (int)mCamHeight);
 
     if (mUvCamSource == NULL)
     {
@@ -666,6 +671,10 @@ void camera_process::update_rects(int distance)
     mUvSrcRect.y = temp_dst_y < 0 ? uv_cam_h * (-temp_dst_y) / temp_dst_height : 0;
     mUvSrcRect.width = uv_cam_w * mUvDstRect.width / temp_dst_width;
     mUvSrcRect.height = uv_cam_h * mUvDstRect.height / temp_dst_height;
+
+    mTapAeAf.set_crop(mVlSrcRect.x, mVlSrcRect.y,
+                      mVlSrcRect.width, mVlSrcRect.height,
+                      cam_w, cam_h);
     return;
 }
 
@@ -1481,4 +1490,16 @@ void camera_process::do_oneshot_focus()
 {
     if (mCamSource)
         oneshot_focus(mCamSource);
+}
+
+void camera_process::do_tap_aeaf(float nx, float ny)
+{
+    mTapAeAf.queue_tap(nx, ny);
+}
+
+void camera_tap_aeaf(float nx, float ny)
+{
+    if (!processor)
+        return;
+    processor->do_tap_aeaf(nx, ny);
 }

@@ -4,6 +4,7 @@
 #include "camera_source.h"
 #include "dma_buf.h"
 #include "encoder.h"
+#include "tap_aeaf.h"
 #include <string>
 #include <atomic>
 #include <pthread.h>
@@ -88,6 +89,8 @@ public:
     // zoom ratio
     void set_zoom_ratio(float v); float get_zoom_ratio() const;
     void do_oneshot_focus();
+    TapAeAf mTapAeAf;
+    void do_tap_aeaf(float nx, float ny);
     // 统一 OSD 语言切换（内部同时作用录像与拍照）
     void apply_language(bool use_cn);
     im_rect mUvSrcRect = {160, 90, 960, 540};
@@ -142,6 +145,7 @@ extern "C"
     bool camera_correction_factor_load();
     void camera_set_zoom_ratio(float v);
     float camera_get_zoom_ratio();
+    void camera_tap_aeaf(float nx, float ny);
 }
 
 camera_process::camera_process(/* args */)
