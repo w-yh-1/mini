@@ -230,10 +230,18 @@ void *camera_process::snapshot_worker(void *arg)
                     g_ftosd.render_text(use_cn ? "计数：" : "Count：", base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
                     g_ftosd.render_text(count_val, base, width, height, stride_bytes, px_value, py, 255, 255, 255, true);
 
-                    // 第五行：缺陷标签 + 值
+                    // 第五行：缺陷标签 + 值（颜色与录像 OSD 调色板一致：绿/蓝/黄/红）
                     py += 42 + 4;
+                    unsigned char flaw_r = 255, flaw_g = 255, flaw_b = 255;
+                    switch (flaw_level)
+                    {
+                    case 0: flaw_r = 0;   flaw_g = 255; flaw_b = 0;   break;
+                    case 1: flaw_r = 0;   flaw_g = 0;   flaw_b = 255; break;
+                    case 2: flaw_r = 255; flaw_g = 255; flaw_b = 0;   break;
+                    case 3: flaw_r = 255; flaw_g = 0;   flaw_b = 0;   break;
+                    }
                     g_ftosd.render_text(use_cn ? "缺陷：" : "LVL：", base, width, height, stride_bytes, px_label, py, 255, 255, 255, true);
-                    g_ftosd.render_text(flaw_val, base, width, height, stride_bytes, px_value, py, 255, 255, 255, true);
+                    g_ftosd.render_text(flaw_val, base, width, height, stride_bytes, px_value, py, flaw_r, flaw_g, flaw_b, true);
                 }
                 int rc = 0;
                 if (stride_bytes == row_bytes)
@@ -317,6 +325,21 @@ void *camera_process::camera_task(void *arg)
     DELAY_INIT;
     for (;;)
     {
+        static bool uv_gain_wakeup_done = false;
+        if (!uv_gain_wakeup_done && uv_ctx != NULL)
+        {
+            static struct timespec uv_ctx_ready_time = {0, 0};
+            if (uv_ctx_ready_time.tv_sec == 0)
+                clock_gettime(CLOCK_MONOTONIC, &uv_ctx_ready_time);
+            struct timespec now_ts;
+            clock_gettime(CLOCK_MONOTONIC, &now_ts);
+            if (now_ts.tv_sec - uv_ctx_ready_time.tv_sec >= 5)
+            {
+                set_uv_gain_raw(50);
+                uv_gain_wakeup_done = true;
+            }
+        }
+
         DELAY_US(CAMERA_FRAME_INTERVAL_US, 1000);
         // Process main camera
         if (cam_stream_on)
@@ -401,7 +424,6 @@ void *camera_process::camera_task(void *arg)
                     eventfd_notify(processor->mSnapEventFd);
                 }
             }
-            // enc_buf解锁
         }
         level = (uv_photons > 8000) ? 3 : 
                 (uv_photons > 1000) ? 2 : 
@@ -844,7 +866,7 @@ bool init_UV_async(uv_async_t **uv_ctx)
         *uv_ctx = NULL;
         return false;
     }
-    
+
     return true;
 }
 
