@@ -361,12 +361,16 @@ void *camera_process::camera_task(void *arg)
                 continue;
             }
             uv_buf = camera_frame_to_RgaBuffer(processor->mUvCamSource, uv_frame_id);
-            rga_imcolorkey(*uv_buf,
-                           processor->mTempBuf.rga_buf,
-                           processor->mUvSrcRect,
-                           processor->mUvDstRect, // dstRect
-                           black_range,
-                           IM_ALPHA_COLORKEY_NORMAL);
+            if (processor->mUvDstRect.width > 0 && processor->mUvDstRect.height > 0 &&
+                processor->mUvSrcRect.width > 0 && processor->mUvSrcRect.height > 0)
+            {
+                rga_imcolorkey(*uv_buf,
+                               processor->mTempBuf.rga_buf,
+                               processor->mUvSrcRect,
+                               processor->mUvDstRect,
+                               black_range,
+                               IM_ALPHA_COLORKEY_NORMAL);
+            }
             camera_source_put_frame(processor->mUvCamSource, uv_frame_id);
             // enc_buf上锁
             enc_buf = processor->mEncoder->deque_input_buf();
@@ -656,21 +660,25 @@ void camera_process::update_rects(int distance)
 
     const int uv_cam_w = (int)mUvCamWidth;
     const int uv_cam_h = (int)mUvCamHeight;
-    int temp_dst_width = uv_cam_w * scaleFactor * zoom_ratio;
-    int temp_dst_height = uv_cam_h * scaleFactor * zoom_ratio;
+    const float effective_scale = std::max(0.01f, scaleFactor * zoom_ratio);
+    int temp_dst_width = (int)(uv_cam_w * effective_scale);
+    int temp_dst_height = (int)(uv_cam_h * effective_scale);
     int temp_dst_x = (enc_w - temp_dst_width) / 2 + residual_x_offset;
     int temp_dst_y = (enc_h - temp_dst_height) / 2 + residual_y_offset;
 
     // 实际 UV 目标区域
     mUvDstRect.x = std::max(0, temp_dst_x);
     mUvDstRect.y = std::max(0, temp_dst_y);
-    mUvDstRect.width = std::min(enc_w, temp_dst_width + temp_dst_x) - mUvDstRect.x;
-    mUvDstRect.height = std::min(enc_h, temp_dst_height + temp_dst_y) - mUvDstRect.y;
+    mUvDstRect.width = std::max(0, std::min(enc_w, temp_dst_width + temp_dst_x) - mUvDstRect.x);
+    mUvDstRect.height = std::max(0, std::min(enc_h, temp_dst_height + temp_dst_y) - mUvDstRect.y);
 
-    mUvSrcRect.x = temp_dst_x < 0 ? uv_cam_w * (-temp_dst_x) / temp_dst_width : 0;
-    mUvSrcRect.y = temp_dst_y < 0 ? uv_cam_h * (-temp_dst_y) / temp_dst_height : 0;
-    mUvSrcRect.width = uv_cam_w * mUvDstRect.width / temp_dst_width;
-    mUvSrcRect.height = uv_cam_h * mUvDstRect.height / temp_dst_height;
+    if (temp_dst_width > 0 && temp_dst_height > 0)
+    {
+        mUvSrcRect.x = temp_dst_x < 0 ? uv_cam_w * (-temp_dst_x) / temp_dst_width : 0;
+        mUvSrcRect.y = temp_dst_y < 0 ? uv_cam_h * (-temp_dst_y) / temp_dst_height : 0;
+        mUvSrcRect.width = uv_cam_w * mUvDstRect.width / temp_dst_width;
+        mUvSrcRect.height = uv_cam_h * mUvDstRect.height / temp_dst_height;
+    }
 
     mTapAeAf.set_crop(mVlSrcRect.x, mVlSrcRect.y,
                       mVlSrcRect.width, mVlSrcRect.height,
